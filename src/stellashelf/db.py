@@ -156,7 +156,7 @@ class Frame(Base):
     __tablename__ = "frames"
 
     id = Column(Integer, primary_key=True)
-    session_id = Column(Integer, ForeignKey("sessions.id"), nullable=False, index=True)
+    session_id = Column(Integer, ForeignKey("sessions.id"), nullable=True, index=True)
 
     filename = Column(String(512), nullable=False)
     filepath = Column(Text, nullable=False)
