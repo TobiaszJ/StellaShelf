@@ -9,6 +9,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
 from pydantic import BaseModel, ConfigDict
 
 from stellashelf.db import init_db, Target, Session as ObsSession, Frame, Camera, Telescope, CalibrationFile
@@ -253,14 +254,14 @@ def _run_scan(root: Path, recursive: bool):
             session.commit()
 
             # Recalculate session stats
-            session.execute(
+            session.execute(text(
                 """
                 UPDATE sessions SET
                     frame_count = (SELECT COUNT(*) FROM frames WHERE frames.session_id = sessions.id),
                     total_exposure_s = COALESCE((SELECT SUM(frames.exposure) FROM frames WHERE frames.session_id = sessions.id), 0),
                     total_exposure_h = COALESCE((SELECT SUM(frames.exposure) FROM frames WHERE frames.session_id = sessions.id), 0) / 3600.0
                 """
-            )
+            ))
             session.commit()
 
         with _scan_lock:

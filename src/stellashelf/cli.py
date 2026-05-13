@@ -6,6 +6,7 @@ from pathlib import Path
 import click
 from rich.console import Console
 from rich.table import Table
+from sqlalchemy import text
 
 from stellashelf.db import init_db, Session as ObsSession, Target, Frame, Camera, Telescope, CalibrationFile
 from stellashelf.scanner import scan_directory, generate_group_key, find_fits_files
@@ -214,14 +215,14 @@ def scan(path: str, db: str, recursive: bool, dry_run: bool, verbose: bool):
 
         # Recalculate session stats with raw SQL (much faster than loading ORM objects)
         console.print("\n[yellow]Recalculating session statistics...[/yellow]")
-        session.execute(
+        session.execute(text(
             """
             UPDATE sessions SET
                 frame_count = (SELECT COUNT(*) FROM frames WHERE frames.session_id = sessions.id),
                 total_exposure_s = COALESCE((SELECT SUM(frames.exposure) FROM frames WHERE frames.session_id = sessions.id), 0),
                 total_exposure_h = COALESCE((SELECT SUM(frames.exposure) FROM frames WHERE frames.session_id = sessions.id), 0) / 3600.0
             """
-        )
+        ))
         session.commit()
 
     console.print(f"\n[green]✓ Imported {imported} frames ({skipped} duplicates skipped)[/green]")
