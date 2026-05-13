@@ -142,7 +142,19 @@ def scan_fits_file(filepath: Path) -> ScannedFrame:
             frame.site_name = str(header.get("SITENAME", "")).strip()
             frame.observer = str(header.get("OBSERVER", "")).strip()
             frame.creator = str(header.get("CREATOR", "")).strip()
-            frame.frame_type = str(header.get("IMAGETYP", "")).strip().upper()
+
+            # Normalize IMAGETYP: "Light Frame" → LIGHT, "Dark Frame" → DARK, etc.
+            raw_type = str(header.get("IMAGETYP", "")).strip()
+            if "light" in raw_type.lower():
+                frame.frame_type = "LIGHT"
+            elif "dark" in raw_type.lower():
+                frame.frame_type = "DARK"
+            elif "flat" in raw_type.lower():
+                frame.frame_type = "FLAT"
+            elif "bias" in raw_type.lower():
+                frame.frame_type = "BIAS"
+            else:
+                frame.frame_type = raw_type.upper() if raw_type else ""
 
             # Numeric fields
             exposure = header.get("EXPOSURE")
@@ -341,6 +353,14 @@ def scan_directory(
                             frame.binning = parsed["binning"]
                         if not frame.filter_name and "filter_name" in parsed:
                             frame.filter_name = parsed["filter_name"]
+
+                # If OBJECT is still empty, try to extract from filename
+                # Handles patterns like M42_Ha.fit, NGC7000_L_300s.fit, etc.
+                if not frame.object_name:
+                    # Try to extract object name from filename: M42, NGC7000, IC434, etc.
+                    name_match = re.match(r"^([A-Z]{1,2}\d+[a-zA-Z]?)_", frame.filename)
+                    if name_match:
+                        frame.object_name = name_match.group(1)
 
                 if frame.errors:
                     errors.extend(frame.errors)
