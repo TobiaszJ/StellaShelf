@@ -1,0 +1,1 @@
+"""StellaShelf FastAPI application."""

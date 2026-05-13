@@ -1,0 +1,1 @@
+"""StellaShelf FITS/XISF header scanner."""
