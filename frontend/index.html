@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StellaShelf</title>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --surface: #161b22;
+            --border: #30363d;
+            --text: #e6edf3;
+            --text-muted: #8b949e;
+            --accent: #58a6ff;
+            --accent2: #3fb950;
+            --accent3: #f0883e;
+            --badge-raw: #d29922;
+            --badge-calibrated: #3fb950;
+            --badge-stacked: #58a6ff;
+            --badge-processed: #a371f7;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+        .navbar {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            gap: 24px;
+        }
+        .navbar h1 { font-size: 20px; font-weight: 600; }
+        .navbar h1 span { color: var(--accent); }
+        .nav-links { display: flex; gap: 16px; }
+        .nav-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 14px;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .nav-links a:hover, .nav-links a.active {
+            color: var(--text);
+            background: rgba(88, 166, 255, 0.1);
+        }
+        .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+        }
+        .stat-card .value {
+            font-size: 36px;
+            font-weight: 700;
+            color: var(--accent);
+        }
+        .stat-card .label {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+        .section { margin-bottom: 32px; }
+        .section h2 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 10px 14px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        th {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        td { font-size: 14px; }
+        tr:hover td { background: rgba(88, 166, 255, 0.05); }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .badge-raw { background: rgba(210, 153, 34, 0.15); color: var(--badge-raw); }
+        .link {
+            color: var(--accent);
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .link:hover { text-decoration: underline; }
+        .btn {
+            display: inline-block;
+            padding: 8px 16px;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .btn:hover { opacity: 0.9; }
+        .back-link { margin-bottom: 16px; }
+        .session-detail { margin-top: 24px; }
+        .session-meta {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .meta-item {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 12px;
+        }
+        .meta-item .label { font-size: 12px; color: var(--text-muted); }
+        .meta-item .value { font-size: 16px; font-weight: 500; margin-top: 4px; }
+        .loading { text-align: center; padding: 40px; color: var(--text-muted); }
+        .empty { text-align: center; padding: 40px; color: var(--text-muted); }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <h1>🌌 <span>Stella</span>Shelf</h1>
+        <div class="nav-links">
+            <a onclick="showPage('dashboard')" id="nav-dashboard" class="active">Dashboard</a>
+            <a onclick="showPage('targets')" id="nav-targets">Targets</a>
+            <a onclick="showPage('sessions')" id="nav-sessions">Sessions</a>
+            <a onclick="showPage('equipment')" id="nav-equipment">Equipment</a>
+        </div>
+    </nav>
+
+    <div class="container" id="app"></div>
+
+    <script>
+        const API = '/api/v1';
+
+        // Navigation
+        function showPage(page, param) {
+            document.querySelectorAll('.nav-links a').forEach(a => a.classList.remove('active'));
+            const navEl = document.getElementById(`nav-${page}`);
+            if (navEl) navEl.classList.add('active');
+
+            switch(page) {
+                case 'dashboard': renderDashboard(); break;
+                case 'targets': renderTargets(); break;
+                case 'sessions': renderSessions(); break;
+                case 'equipment': renderEquipment(); break;
+                case 'target': renderTargetDetail(param); break;
+                case 'session': renderSessionDetail(param); break;
+            }
+        }
+
+        async function api(path) {
+            const res = await fetch(`${API}${path}`);
+            if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+            return res.json();
+        }
+
+        // --- Dashboard ---
+        async function renderDashboard() {
+            const app = document.getElementById('app');
+            app.innerHTML = '<div class="loading">Loading...</div>';
+
+            const [stats, targets] = await Promise.all([
+                api('/stats'),
+                api('/targets')
+            ]);
+
+            app.innerHTML = `
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="value">${stats.targets}</div>
+                        <div class="label">Targets</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value">${stats.sessions}</div>
+                        <div class="label">Sessions</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value">${stats.frames}</div>
+                        <div class="label">Frames</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value">${stats.total_exposure_h}h</div>
+                        <div class="label">Total Exposure</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value">${stats.calibration_files}</div>
+                        <div class="label">Calibration Files</div>
+                    </div>
+                </div>
+                <div class="section">
+                    <h2>Recent Targets</h2>
+                    ${targets.length === 0 ? '<div class="empty">No targets found. Run <code>stellashelf scan</code> to import your data.</div>' : `
+                    <table>
+                        <thead><tr><th>Target</th><th>Sessions</th><th>Type</th></tr></thead>
+                        <tbody>
+                            ${targets.map(t => `
+                                <tr>
+                                    <td><span class="link" onclick="showPage('target', ${t.id})">${t.name}</span></td>
+                                    <td>${t.sessions ? t.sessions.length : '?'}</td>
+                                    <td>${t.object_type || '-'}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>`}
+                </div>
+            `;
+        }
+
+        // --- Targets ---
+        async function renderTargets() {
+            const app = document.getElementById('app');
+            app.innerHTML = '<div class="loading">Loading targets...</div>';
+            const targets = await api('/targets');
+
+            // Fetch session counts for each target
+            const targetsWithCounts = await Promise.all(targets.map(async t => {
+                const sessions = await api(`/targets/${t.id}/sessions`);
+                return { ...t, sessionCount: sessions.length };
+            }));
+
+            app.innerHTML = `
+                <div class="section">
+                    <h2>All Targets (${targets.length})</h2>
+                    <table>
+                        <thead><tr><th>Target</th><th>Sessions</th><th>Type</th><th>Constellation</th></tr></thead>
+                        <tbody>
+                            ${targetsWithCounts.map(t => `
+                                <tr>
+                                    <td><span class="link" onclick="showPage('target', ${t.id})">${t.name}</span></td>
+                                    <td>${t.sessionCount}</td>
+                                    <td>${t.object_type || '-'}</td>
+                                    <td>${t.constellation || '-'}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        // --- Target Detail ---
+        async function renderTargetDetail(targetId) {
+            const app = document.getElementById('app');
+            app.innerHTML = '<div class="loading">Loading target...</div>';
+
+            const [target, sessions] = await Promise.all([
+                api(`/targets/${targetId}`),
+                api(`/targets/${targetId}/sessions`)
+            ]);
+
+            app.innerHTML = `
+                <div class="back-link">
+                    <span class="link" onclick="showPage('targets')">← Back to Targets</span>
+                </div>
+                <div class="section">
+                    <h2>${target.name}</h2>
+                    <p style="color: var(--text-muted); margin-bottom: 24px;">
+                        ${target.object_type || 'Unknown type'} ${target.constellation ? `in ${target.constellation}` : ''}
+                    </p>
+                </div>
+                <div class="section">
+                    <h2>Sessions (${sessions.length})</h2>
+                    <table>
+                        <thead><tr><th>Date</th><th>Status</th><th>Frames</th><th>Exposure</th><th></th></tr></thead>
+                        <tbody>
+                            ${sessions.map(s => `
+                                <tr>
+                                    <td>${s.date_obs.split('T')[0]}</td>
+                                    <td><span class="badge badge-${s.status}">${s.status}</span></td>
+                                    <td>${s.frame_count}</td>
+                                    <td>${s.total_exposure_h.toFixed(1)}h</td>
+                                    <td><span class="link" onclick="showPage('session', ${s.id})">Details →</span></td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        // --- Sessions ---
+        async function renderSessions() {
+            const app = document.getElementById('app');
+            app.innerHTML = '<div class="loading">Loading sessions...</div>';
+            const sessions = await api('/sessions');
+
+            app.innerHTML = `
+                <div class="section">
+                    <h2>All Sessions (${sessions.length})</h2>
+                    <table>
+                        <thead><tr><th>Date</th><th>Status</th><th>Frames</th><th>Exposure</th><th></th></tr></thead>
+                        <tbody>
+                            ${sessions.map(s => `
+                                <tr>
+                                    <td>${s.date_obs.split('T')[0]}</td>
+                                    <td><span class="badge badge-${s.status}">${s.status}</span></td>
+                                    <td>${s.frame_count}</td>
+                                    <td>${s.total_exposure_h.toFixed(1)}h</td>
+                                    <td><span class="link" onclick="showPage('session', ${s.id})">Details →</span></td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        // --- Session Detail ---
+        async function renderSessionDetail(sessionId) {
+            const app = document.getElementById('app');
+            app.innerHTML = '<div class="loading">Loading session...</div>';
+
+            const session = await api(`/sessions/${sessionId}`);
+            const frames = await api(`/frames?session_id=${sessionId}&limit=1000`);
+
+            // Group frames by filter
+            const byFilter = {};
+            frames.forEach(f => {
+                const key = f.filter_name || 'unknown';
+                if (!byFilter[key]) byFilter[key] = [];
+                byFilter[key].push(f);
+            });
+
+            app.innerHTML = `
+                <div class="back-link">
+                    <span class="link" onclick="showPage('targets')">← Back to Targets</span>
+                </div>
+                <div class="section">
+                    <h2>Session: ${frames.length > 0 ? frames[0].object_name : 'Unknown'}</h2>
+                    <div class="session-meta">
+                        <div class="meta-item">
+                            <div class="label">Date</div>
+                            <div class="value">${session.date_obs.split('T')[0]}</div>
+                        </div>
+                        <div class="meta-item">
+                            <div class="label">Status</div>
+                            <div class="value"><span class="badge badge-${session.status}">${session.status}</span></div>
+                        </div>
+                        <div class="meta-item">
+                            <div class="label">Frames</div>
+                            <div class="value">${session.frame_count}</div>
+                        </div>
+                        <div class="meta-item">
+                            <div class="label">Total Exposure</div>
+                            <div class="value">${session.total_exposure_h.toFixed(2)}h</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="section">
+                    <h2>Frames by Filter</h2>
+                    ${Object.entries(byFilter).map(([filter, filterFrames]) => `
+                        <h3 style="margin: 16px 0 8px; font-size: 14px; color: var(--accent3);">${filter}: ${filterFrames.length} frames (${(filterFrames.reduce((sum, f) => sum + (f.exposure || 0), 0) / 3600).toFixed(2)}h)</h3>
+                        <table>
+                            <thead><tr><th>File</th><th>Type</th><th>Exp</th><th>Gain</th><th>Temp</th><th>Bin</th></tr></thead>
+                            <tbody>
+                                ${filterFrames.slice(0, 20).map(f => `
+                                    <tr>
+                                        <td style="font-family: monospace; font-size: 13px;">${f.filename}</td>
+                                        <td>${f.frame_type}</td>
+                                        <td>${f.exposure}s</td>
+                                        <td>${f.gain ?? '-'}</td>
+                                        <td>${f.ccd_temp ? f.ccd_temp + '°C' : '-'}</td>
+                                        <td>${f.binning}x</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                        ${filterFrames.length > 20 ? `<p style="color: var(--text-muted); margin-top: 8px;">... and ${filterFrames.length - 20} more</p>` : ''}
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        // --- Equipment ---
+        async function renderEquipment() {
+            const app = document.getElementById('app');
+            app.innerHTML = '<div class="loading">Loading equipment...</div>';
+
+            const [cameras, telescopes] = await Promise.all([
+                api('/cameras'),
+                api('/telescopes')
+            ]);
+
+            app.innerHTML = `
+                <div class="section">
+                    <h2>Cameras</h2>
+                    <table>
+                        <thead><tr><th>Name</th><th>Short Name</th><th>Pixel Size (µm)</th></tr></thead>
+                        <tbody>
+                            ${cameras.map(c => `
+                                <tr>
+                                    <td>${c.name}</td>
+                                    <td>${c.short_name || '-'}</td>
+                                    <td>${c.pixel_size_um || '-'}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="section">
+                    <h2>Telescopes</h2>
+                    <table>
+                        <thead><tr><th>Name</th><th>Short Name</th><th>Focal Length (mm)</th></tr></thead>
+                        <tbody>
+                            ${telescopes.map(t => `
+                                <tr>
+                                    <td>${t.name}</td>
+                                    <td>${t.short_name || '-'}</td>
+                                    <td>${t.focal_length_mm || '-'}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        // Initial render
+        showPage('dashboard');
+    </script>
+</body>
+</html>

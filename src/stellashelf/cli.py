@@ -191,6 +191,15 @@ def scan(path: str, db: str, recursive: bool, dry_run: bool, verbose: bool):
 
         session.commit()
 
+        # Recalculate session statistics
+        console.print("\n[yellow]Recalculating session statistics...[/yellow]")
+        for s in session.query(ObsSession).all():
+            frames = session.query(Frame).filter_by(session_id=s.id).all()
+            s.frame_count = len(frames)
+            s.total_exposure_s = sum(f.exposure or 0 for f in frames)
+            s.total_exposure_h = s.total_exposure_s / 3600
+        session.commit()
+
     console.print(f"\n[green]✓ Imported {imported} frames ({skipped} duplicates skipped)[/green]")
     console.print(f"  [cyan]Targets:[/cyan] {len(targets_seen)}")
     console.print(f"  [cyan]Sessions:[/cyan] {len(sessions_seen)}")
