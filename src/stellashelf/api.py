@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict
 
 from stellashelf.db import init_db, Target, Session as ObsSession, Frame, Camera, Telescope, CalibrationFile
 
-DB_PATH = Path("~/.stellashelf/stellashelf.db").expanduser().resolve()
+DB_PATH = Path("~/stellashelf/stellashelf.db").expanduser().resolve()
 
 
 def get_session_local():
