@@ -110,7 +110,6 @@ def scan(path: str, db: str, recursive: bool, dry_run: bool, verbose: bool):
                     ccd_temp=frame.ccd_temp,
                     filepath=str(frame.filepath),
                     filename=frame.filename,
-                    file_size=frame.file_size,
                 )
                 session.add(cal)
                 cal_files_seen += 1
