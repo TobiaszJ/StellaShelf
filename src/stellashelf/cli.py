@@ -12,6 +12,8 @@ from stellashelf.scanner import scan_directory, generate_group_key, find_fits_fi
 
 console = Console()
 
+BATCH_SIZE = 500  # Commit every N frames to keep memory low and enable partial recovery
+
 
 @click.group()
 @click.version_option()
@@ -38,7 +40,6 @@ def scan(path: str, db: str, recursive: bool, dry_run: bool, verbose: bool):
     console.print(f"[bold cyan]StellaShelf[/bold cyan] scanning: {root}")
     console.print(f"Database: {db_path}")
 
-    # Scan all FITS files
     frames = scan_directory(root, recursive=recursive, dry_run=dry_run, verbose=verbose)
 
     if dry_run:
@@ -46,12 +47,10 @@ def scan(path: str, db: str, recursive: bool, dry_run: bool, verbose: bool):
         _print_scan_summary(frames)
         return
 
-    # Import into database
     db_path.parent.mkdir(parents=True, exist_ok=True)
     engine, SessionLocal = init_db(db_path)
 
     with SessionLocal() as session:
-        # Track equipment we've seen
         cameras_seen: dict[str, int] = {}
         telescopes_seen: dict[str, int] = {}
         targets_seen: dict[str, int] = {}
@@ -60,50 +59,58 @@ def scan(path: str, db: str, recursive: bool, dry_run: bool, verbose: bool):
 
         imported = 0
         skipped = 0
+        batch_count = 0
+
+        # Pre-load all existing frames into a set for fast duplicate check
+        existing_paths = set()
+        for row in session.query(Frame.filepath).all():
+            existing_paths.add(row[0])
+
+        # Pre-load all existing sessions by group_key
+        for row in session.query(ObsSession.id, ObsSession.group_key).all():
+            sessions_seen[row[1]] = row[0]
+
+        # Pre-load all existing equipment
+        for row in session.query(Camera.id, Camera.name).all():
+            cameras_seen[row[1]] = row[0]
+        for row in session.query(Telescope.id, Telescope.name).all():
+            telescopes_seen[row[1]] = row[0]
+        for row in session.query(Target.id, Target.name).all():
+            targets_seen[row[1]] = row[0]
 
         for frame in frames:
-            # Auto-detect and create equipment
+            # Equipment
             camera_id = None
             if frame.instrume:
                 if frame.instrume not in cameras_seen:
-                    # Check if camera exists
-                    existing = session.query(Camera).filter_by(name=frame.instrume).first()
-                    if existing:
-                        cameras_seen[frame.instrume] = existing.id
-                    else:
-                        camera = Camera(
-                            name=frame.instrume,
-                            short_name=frame.instrume.replace("ZWO ", "").replace("ASI Camera", "ASI"),
-                            pixel_size_um=frame.pixel_size_um,
-                        )
-                        session.add(camera)
-                        session.flush()
-                        cameras_seen[frame.instrume] = camera.id
+                    camera = Camera(
+                        name=frame.instrume,
+                        short_name=frame.instrume.replace("ZWO ", "").replace("ASI Camera", "ASI"),
+                        pixel_size_um=frame.pixel_size_um,
+                    )
+                    session.add(camera)
+                    session.flush()
+                    cameras_seen[frame.instrume] = camera.id
                 camera_id = cameras_seen[frame.instrume]
 
             telescope_id = None
             if frame.telescop:
                 if frame.telescop not in telescopes_seen:
-                    existing = session.query(Telescope).filter_by(name=frame.telescop).first()
-                    if existing:
-                        telescopes_seen[frame.telescop] = existing.id
-                    else:
-                        telescope = Telescope(
-                            name=frame.telescop,
-                            short_name=frame.telescop,
-                            focal_length_mm=frame.focal_length_mm,
-                        )
-                        session.add(telescope)
-                        session.flush()
-                        telescopes_seen[frame.telescop] = telescope.id
+                    telescope = Telescope(
+                        name=frame.telescop,
+                        short_name=frame.telescop,
+                        focal_length_mm=frame.focal_length_mm,
+                    )
+                    session.add(telescope)
+                    session.flush()
+                    telescopes_seen[frame.telescop] = telescope.id
                 telescope_id = telescopes_seen[frame.telescop]
 
-            # Handle calibration files: no object name + cal frame type
+            # Calibration files: no object + cal frame type → separate table
             if not frame.object_name and frame.frame_type in ("BIAS", "DARK", "FLAT"):
-                cal_type = frame.frame_type.lower()
                 cal = CalibrationFile(
                     camera_id=camera_id,
-                    cal_type=cal_type,
+                    cal_type=frame.frame_type.lower(),
                     exposure_s=frame.exposure,
                     gain=frame.gain,
                     binning=frame.binning,
@@ -115,31 +122,38 @@ def scan(path: str, db: str, recursive: bool, dry_run: bool, verbose: bool):
                 cal_files_seen += 1
                 continue
 
-            # Create/get target
+            # Target
             target_id = None
-            obj_name = frame.object_name.strip() if frame.object_name else "UNKNOWN"
+            obj_name = frame.object_name.strip() if frame.object_name else ""
             if obj_name and obj_name != "UNKNOWN":
                 if obj_name not in targets_seen:
-                    existing = session.query(Target).filter_by(name=obj_name).first()
-                    if existing:
-                        targets_seen[obj_name] = existing.id
-                    else:
-                        target = Target(name=obj_name)
-                        session.add(target)
-                        session.flush()
-                        targets_seen[obj_name] = target.id
+                    target = Target(name=obj_name)
+                    session.add(target)
+                    session.flush()
+                    targets_seen[obj_name] = target.id
                 target_id = targets_seen.get(obj_name)
 
-            # Check for duplicate
-            existing_frame = session.query(Frame).filter_by(filepath=str(frame.filepath)).first()
-            if existing_frame:
+            # Duplicate check via pre-loaded set
+            fp = str(frame.filepath)
+            if fp in existing_paths:
                 skipped += 1
                 continue
+            existing_paths.add(fp)
 
-            # Generate group key and create/get session
+            # Session: create if needed
             group_key = generate_group_key(frame)
             obs_id = sessions_seen.get(group_key)
-            if obs_id is None and target_id is not None:
+
+            if obs_id is None:
+                # Sessions always get a target_id; use UNKNOWN target if needed
+                if target_id is None:
+                    if "UNKNOWN" not in targets_seen:
+                        unk = Target(name="UNKNOWN")
+                        session.add(unk)
+                        session.flush()
+                        targets_seen["UNKNOWN"] = unk.id
+                    target_id = targets_seen["UNKNOWN"]
+
                 existing_session = session.query(ObsSession).filter_by(group_key=group_key).first()
                 if existing_session:
                     obs_id = existing_session.id
@@ -159,11 +173,11 @@ def scan(path: str, db: str, recursive: bool, dry_run: bool, verbose: bool):
                     obs_id = obs.id
                     sessions_seen[group_key] = obs_id
 
-            # Create frame record
+            # Frame record
             db_frame = Frame(
                 session_id=obs_id,
                 filename=frame.filename,
-                filepath=str(frame.filepath),
+                filepath=fp,
                 file_size=frame.file_size,
                 frame_type=frame.frame_type or "LIGHT",
                 object_name=obj_name,
@@ -188,16 +202,26 @@ def scan(path: str, db: str, recursive: bool, dry_run: bool, verbose: bool):
             )
             session.add(db_frame)
             imported += 1
+            batch_count += 1
+
+            # FIX #2: Batch commits to keep memory low
+            if batch_count >= BATCH_SIZE:
+                session.commit()
+                console.print(f"  [dim]Checkpoint: {imported} imported, {skipped} skipped[/dim]")
+                batch_count = 0
 
         session.commit()
 
-        # Recalculate session statistics
+        # Recalculate session stats with raw SQL (much faster than loading ORM objects)
         console.print("\n[yellow]Recalculating session statistics...[/yellow]")
-        for s in session.query(ObsSession).all():
-            frames = session.query(Frame).filter_by(session_id=s.id).all()
-            s.frame_count = len(frames)
-            s.total_exposure_s = sum(f.exposure or 0 for f in frames)
-            s.total_exposure_h = s.total_exposure_s / 3600
+        session.execute(
+            """
+            UPDATE sessions SET
+                frame_count = (SELECT COUNT(*) FROM frames WHERE frames.session_id = sessions.id),
+                total_exposure_s = COALESCE((SELECT SUM(frames.exposure) FROM frames WHERE frames.session_id = sessions.id), 0),
+                total_exposure_h = COALESCE((SELECT SUM(frames.exposure) FROM frames WHERE frames.session_id = sessions.id), 0) / 3600.0
+            """
+        )
         session.commit()
 
     console.print(f"\n[green]✓ Imported {imported} frames ({skipped} duplicates skipped)[/green]")
@@ -270,7 +294,7 @@ def _print_scan_summary(frames):
     table.add_column("Exposure", justify="right")
     table.add_column("Date", style="blue")
 
-    for f in frames[:50]:  # Show first 50
+    for f in frames[:50]:
         table.add_row(
             f.object_name or "-",
             f.frame_type or "-",

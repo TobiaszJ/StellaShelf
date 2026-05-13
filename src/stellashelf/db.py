@@ -16,6 +16,7 @@ from sqlalchemy import (
     ForeignKey,
     Boolean,
     Index,
+    UniqueConstraint,
     create_engine,
     event,
 )
@@ -39,7 +40,6 @@ class Camera(Base):
 
     id = Column(Integer, primary_key=True)
     name = Column(String(255), nullable=False, unique=True)
-    # Normalized name for matching (e.g., "ASI Camera (1)" → "ASI294MMPro")
     short_name = Column(String(64), nullable=True)
     pixel_size_um = Column(Float, nullable=True)
     sensor_width_px = Column(Integer, nullable=True)
@@ -57,7 +57,6 @@ class Telescope(Base):
 
     id = Column(Integer, primary_key=True)
     name = Column(String(255), nullable=False, unique=True)
-    # Normalized name for matching (e.g., "POTH Hub" → actual scope)
     short_name = Column(String(64), nullable=True)
     focal_length_mm = Column(Float, nullable=True)
     aperture_mm = Column(Float, nullable=True)
@@ -73,7 +72,7 @@ class Filter(Base):
 
     id = Column(Integer, primary_key=True)
     name = Column(String(64), nullable=False, unique=True)
-    filter_type = Column(String(32), nullable=True)  # narrowband, broadband, etc.
+    filter_type = Column(String(32), nullable=True)
     bandwidth_nm = Column(Float, nullable=True)
     wavelength_nm = Column(Float, nullable=True)
 
@@ -90,8 +89,8 @@ class Target(Base):
 
     id = Column(Integer, primary_key=True)
     name = Column(String(255), nullable=False, index=True)
-    alt_names = Column(Text, nullable=True)  # comma-separated: "North America Nebula,C20"
-    object_type = Column(String(64), nullable=True)  # Galaxy, Nebula, etc.
+    alt_names = Column(Text, nullable=True)
+    object_type = Column(String(64), nullable=True)
     constellation = Column(String(64), nullable=True)
     ra_deg = Column(Float, nullable=True)
     dec_deg = Column(Float, nullable=True)
@@ -109,37 +108,29 @@ class Session(Base):
     camera_id = Column(Integer, ForeignKey("cameras.id"), nullable=True)
     telescope_id = Column(Integer, ForeignKey("telescopes.id"), nullable=True)
 
-    date_obs = Column(DateTime, nullable=False, index=True)
+    date_obs = Column(DateTime, nullable=True, index=True)
     date_local = Column(DateTime, nullable=True)
     site_name = Column(String(255), nullable=True)
 
-    # Grouping key: unique hash of (target, date, camera, telescope, filter)
     group_key = Column(String(255), nullable=False, unique=True, index=True)
-
-    # Derived path on disk
     path = Column(Text, nullable=True)
 
-    # Status tracking
-    status = Column(String(32), default="raw")  # raw, calibrated, stacked, processed
+    status = Column(String(32), default="raw")
 
-    # Aggregated stats
     total_exposure_s = Column(Float, default=0)
     total_exposure_h = Column(Float, default=0)
     frame_count = Column(Integer, default=0)
 
-    # Metadata
     capture_software = Column(String(255), nullable=True)
     observer = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now())
     updated_at = Column(DateTime, default=lambda: datetime.now(), onupdate=lambda: datetime.now())
 
-    # Relationships
     target = relationship("Target", back_populates="sessions")
     camera = relationship("Camera", back_populates="sessions")
     telescope = relationship("Telescope", back_populates="sessions")
     frames = relationship("Frame", back_populates="obs_session", cascade="all, delete-orphan")
 
-    # Compound index for common queries
     __table_args__ = (
         Index("ix_sessions_target_date", "target_id", "date_obs"),
     )
@@ -159,51 +150,42 @@ class Frame(Base):
     session_id = Column(Integer, ForeignKey("sessions.id"), nullable=True, index=True)
 
     filename = Column(String(512), nullable=False)
-    filepath = Column(Text, nullable=False)
+    filepath = Column(Text, nullable=False, index=True)  # FIX #4: Index for fast dedup
     file_size = Column(Integer, nullable=True)
 
-    # Frame classification
-    frame_type = Column(String(16), nullable=True)  # LIGHT, DARK, FLAT, BIAS
+    frame_type = Column(String(16), nullable=True)
 
-    # Header fields
     object_name = Column(String(255), nullable=True, index=True)
-    instrume = Column(String(255), nullable=True, index=True)  # Camera name from header
-    telescop = Column(String(255), nullable=True)  # Telescope from header
+    instrume = Column(String(255), nullable=True, index=True)
+    telescop = Column(String(255), nullable=True)
     filter_name = Column(String(64), nullable=True, index=True)
-    exposure = Column(Float, nullable=True)  # seconds
+    exposure = Column(Float, nullable=True)
     gain = Column(Integer, nullable=True)
-    ccd_temp = Column(Float, nullable=True)  # degrees C
+    ccd_temp = Column(Float, nullable=True)
     binning = Column(Integer, default=1)
     date_obs = Column(DateTime, nullable=True, index=True)
     date_local = Column(DateTime, nullable=True)
 
-    # Image dimensions
     width = Column(Integer, nullable=True)
     height = Column(Integer, nullable=True)
     pixel_size_um = Column(Float, nullable=True)
 
-    # Coordinates (from header or platesolving)
     ra_deg = Column(Float, nullable=True)
     dec_deg = Column(Float, nullable=True)
     focal_length_mm = Column(Float, nullable=True)
 
-    # Site info
     site_name = Column(String(255), nullable=True)
     observer = Column(String(255), nullable=True)
-    creator = Column(String(255), nullable=True)  # Capture software
+    creator = Column(String(255), nullable=True)
 
-    # Quality metrics (populated later)
     fwhm = Column(Float, nullable=True)
     eccentricity = Column(Float, nullable=True)
     snr = Column(Float, nullable=True)
 
-    # File hash for deduplication
     file_sha256 = Column(String(64), nullable=True, unique=True)
 
-    # Relationships
     obs_session = relationship("Session", back_populates="frames")
 
-    # Metadata
     scanned_at = Column(DateTime, default=lambda: datetime.now())
 
     __table_args__ = (
@@ -223,7 +205,7 @@ class CalibrationFile(Base):
 
     id = Column(Integer, primary_key=True)
     camera_id = Column(Integer, ForeignKey("cameras.id"), nullable=False)
-    cal_type = Column(String(32), nullable=False)  # masterdark, masterbias, masterflat
+    cal_type = Column(String(32), nullable=False)
     exposure_s = Column(Float, nullable=True)
     gain = Column(Integer, nullable=True)
     binning = Column(Integer, default=1)
@@ -232,7 +214,6 @@ class CalibrationFile(Base):
     filepath = Column(Text, nullable=False)
     filename = Column(String(512), nullable=False)
 
-    # Parsed from filename or header
     parsed_exposure = Column(Float, nullable=True)
     parsed_gain = Column(Integer, nullable=True)
     parsed_binning = Column(Integer, nullable=True)
@@ -244,9 +225,6 @@ class CalibrationFile(Base):
 # ---------------------------------------------------------------------------
 # FTS5 full-text search
 # ---------------------------------------------------------------------------
-
-# We'll create the FTS5 table via raw SQL since SQLAlchemy doesn't natively
-# support FTS5 virtual tables. This will be done in the init function.
 
 
 def get_db_path(app_dir: Path | None = None) -> Path:
@@ -264,7 +242,6 @@ def init_db(db_path: Path | None = None) -> tuple:
 
     engine = create_engine(f"sqlite:///{db_path}", echo=False)
 
-    # Enable WAL mode for better concurrent read performance
     @event.listens_for(engine, "connect")
     def set_sqlite_pragma(dbapi_connection, connection_record):
         cursor = dbapi_connection.cursor()
@@ -274,7 +251,6 @@ def init_db(db_path: Path | None = None) -> tuple:
 
     Base.metadata.create_all(engine)
 
-    # Create FTS5 virtual table for full-text search
     with engine.connect() as conn:
         conn.execute(
             text(
@@ -294,7 +270,6 @@ def init_db(db_path: Path | None = None) -> tuple:
         )
         conn.commit()
 
-    # Create triggers to keep FTS5 in sync
     with engine.connect() as conn:
         conn.execute(
             text(

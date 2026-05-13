@@ -7,6 +7,7 @@ Supports:
 - Standard FITS files
 - Gzip-compressed FITS (SGP format) where headers live in HDU[1]
 - Filename-based fallback parsing
+- XISF files (skipped with warning — parser not yet implemented)
 """
 
 import hashlib
@@ -65,11 +66,9 @@ class ScannedFrame:
 
 def _get_header_value(header: fits.Header, key: str, default=None):
     """Get a value from a FITS header, handling alternate key names."""
-    # Try exact match first
     value = header.get(key)
     if value is not None:
         return value
-    # Try common aliases
     aliases = {
         "EXPOSURE": ["EXPTIME", "EXP_TIME"],
         "CCD-TEMP": ["CCDTEMP", "TEMPERAT"],
@@ -86,19 +85,10 @@ def _get_header_value(header: fits.Header, key: str, default=None):
 
 
 def _extract_header(hdu_list: fits.HDUList) -> dict:
-    """Extract relevant headers from a FITS file.
-
-    For compressed FITS files (SGP format), headers contain most
-    metadata in the first extension HDU rather than the primary HDU.
-    We check both and prefer the extension header values.
-    """
+    """Extract relevant headers from a FITS file."""
     primary = hdu_list[0].header
-
-    # For compressed FITS, the actual image header is in the first extension
-    # Keywords are duplicated there with the actual values
     extension = hdu_list[1].header if len(hdu_list) > 1 else primary
 
-    # Merge: use extension values where available, fall back to primary
     result = {}
     keys_to_extract = [
         "OBJECT", "INSTRUME", "TELESCOP", "FILTER", "EXPOSURE",
@@ -109,7 +99,6 @@ def _extract_header(hdu_list: fits.HDUList) -> dict:
     ]
 
     for key in keys_to_extract:
-        # Prefer extension header for compressed files
         value = _get_header_value(extension, key)
         if value is None and extension is not primary:
             value = _get_header_value(primary, key)
@@ -119,11 +108,43 @@ def _extract_header(hdu_list: fits.HDUList) -> dict:
     return result
 
 
-def scan_fits_file(filepath: Path) -> ScannedFrame:
-    """Scan a single FITS file and extract metadata.
+# Normalize IMAGETYP values from various capture software
+_FRAME_TYPE_MAP = {
+    "light": "LIGHT", "light frame": "LIGHT", "lightframe": "LIGHT",
+    "dark": "DARK", "dark frame": "DARK", "darkframe": "DARK",
+    "flat": "FLAT", "flat frame": "FLAT", "flatfield": "FLAT", "flat field": "FLAT",
+    "bias": "BIAS", "bias frame": "BIAS", "biasframe": "BIAS", "offset": "BIAS",
+    "skyflat": "FLAT",
+}
 
-    Handles both standard and gzip-compressed FITS files.
-    """
+
+def _normalize_frame_type(raw: str) -> str:
+    """Normalize IMAGETYP to canonical LIGHT/DARK/FLAT/BIAS."""
+    if not raw:
+        return ""
+    cleaned = raw.strip().lower()
+    return _FRAME_TYPE_MAP.get(cleaned, cleaned.upper())
+
+
+def _extract_object_from_filename(filename: str) -> str:
+    """Try to extract object name from filename patterns like M42_Ha.fit, NGC7000_L_300s.fit."""
+    # Common patterns: M42, NGC7000, IC434, SH2-101, LDN1235, vdB123
+    patterns = [
+        r"^([A-Z]{1,2}\d+[a-zA-Z]?)_",       # M42_, NGC7000_, IC434_
+        r"^(SH[A-Za-z]?[-_]?\d+)_",           # SH2-101_, SH2_101_
+        r"^(LDN\s*\d+)_",                     # LDN1235_
+        r"^(vdB\s*\d+)_",                     # vdB123_
+        r"^(M\s*\d+[a-zA-Z]?)_",              # M 42_ (with space)
+    ]
+    for pat in patterns:
+        m = re.match(pat, filename, re.IGNORECASE)
+        if m:
+            return m.group(1).strip().upper()
+    return ""
+
+
+def scan_fits_file(filepath: Path) -> ScannedFrame:
+    """Scan a single FITS file and extract metadata."""
     frame = ScannedFrame(
         filepath=filepath,
         filename=filepath.name,
@@ -134,7 +155,7 @@ def scan_fits_file(filepath: Path) -> ScannedFrame:
         with fits.open(str(filepath)) as hdul:
             header = _extract_header(hdul)
 
-            # String fields - strip whitespace
+            # String fields
             frame.object_name = str(header.get("OBJECT", "")).strip()
             frame.instrume = str(header.get("INSTRUME", "")).strip()
             frame.telescop = str(header.get("TELESCOP", "")).strip()
@@ -143,18 +164,9 @@ def scan_fits_file(filepath: Path) -> ScannedFrame:
             frame.observer = str(header.get("OBSERVER", "")).strip()
             frame.creator = str(header.get("CREATOR", "")).strip()
 
-            # Normalize IMAGETYP: "Light Frame" → LIGHT, "Dark Frame" → DARK, etc.
+            # FIX #1: Actually use IMAGETYP from header
             raw_type = str(header.get("IMAGETYP", "")).strip()
-            if "light" in raw_type.lower():
-                frame.frame_type = "LIGHT"
-            elif "dark" in raw_type.lower():
-                frame.frame_type = "DARK"
-            elif "flat" in raw_type.lower():
-                frame.frame_type = "FLAT"
-            elif "bias" in raw_type.lower():
-                frame.frame_type = "BIAS"
-            else:
-                frame.frame_type = raw_type.upper() if raw_type else ""
+            frame.frame_type = _normalize_frame_type(raw_type)
 
             # Numeric fields
             exposure = header.get("EXPOSURE")
@@ -169,25 +181,20 @@ def scan_fits_file(filepath: Path) -> ScannedFrame:
             binning = header.get("XBINNING")
             frame.binning = int(binning) if binning is not None else 1
 
-            # Image dimensions
             frame.width = header.get("NAXIS1")
             frame.height = header.get("NAXIS2")
 
-            # Pixel size
             pxsz = header.get("XPIXSZ")
             frame.pixel_size_um = float(pxsz) if pxsz is not None else None
 
-            # Focal length
             fl = header.get("FOCALLEN")
             frame.focal_length_mm = float(fl) if fl is not None else None
 
-            # Coordinates
             ra = header.get("RA") or header.get("CRVAL1")
             frame.ra_deg = float(ra) if ra is not None else None
             dec = header.get("DEC") or header.get("CRVAL2")
             frame.dec_deg = float(dec) if dec is not None else None
 
-            # Date
             date_obs = header.get("DATE-OBS")
             if date_obs:
                 try:
@@ -200,13 +207,10 @@ def scan_fits_file(filepath: Path) -> ScannedFrame:
                 try:
                     frame.date_local = datetime.fromisoformat(str(date_local).strip())
                 except (ValueError, TypeError):
-                    pass  # Non-critical
+                    pass
 
     except Exception as e:
         frame.errors.append(f"FITS read error: {e}")
-
-    # Compute file hash for deduplication (async-friendly: could be done later)
-    # Skipping hash for now to keep scan fast; can be added in a post-processing step
 
     return frame
 
@@ -215,40 +219,32 @@ def scan_fits_file(filepath: Path) -> ScannedFrame:
 # Filename-based fallback parser
 # ---------------------------------------------------------------------------
 
-# Pattern: M33_L_300sec_1x1_-20C_gain_120_0001.fit
-# Pattern: masterbias_1x1_100x_gain_0_-20C.fit
-# Pattern: masterdark_300s_1x1_100x_gain_120_-20C.fit
-
 LIGHT_PATTERN = re.compile(
-    r"^(?P<object>\S+?)_"  # M33, NGC7000, etc.
-    r"(?P<filter>\w+)_"  # L, Ha, OIII, SII, RGB
-    r"(?P<exposure>\d+)sec_"  # 300
-    r"(?P<binning>\d+)x\d+_"  # 1x1
-    r"-?\d+C_"  # temperature
-    r"gain_(?P<gain>\d+)_"  # gain value
-    r"(?P<seq>\d+)",  # sequence number
+    r"^(?P<object>\S+?)_"
+    r"(?P<filter>\w+)_"
+    r"(?P<exposure>\d+)sec_"
+    r"(?P<binning>\d+)x\d+_"
+    r"-?\d+C_"
+    r"gain_(?P<gain>\d+)_"
+    r"(?P<seq>\d+)",
     re.IGNORECASE,
 )
 
 CALIB_PATTERN = re.compile(
     r"^(?P<type>master(?:bias|dark|flat)|smasterdark)_"
-    r"(?:(?P<exposure>\d+)s_)?"  # optional exposure (darks only)
-    r"(?P<binning>\d+)x\d+_?"  # 1x1
-    r"(?:\d+x_)?"  # 100x (subframe count)
-    r"gain_(?P<gain>\d+)_"  # gain value
-    r"-?\d+C",  # temperature
+    r"(?:(?P<exposure>\d+)s_)?"
+    r"(?P<binning>\d+)x\d+_?"
+    r"(?:\d+x_)?"
+    r"gain_(?P<gain>\d+)_"
+    r"-?\d+C",
     re.IGNORECASE,
 )
 
 
 def parse_filename(filepath: Path) -> dict | None:
-    """Try to extract metadata from the filename as a fallback.
-
-    Returns None if the filename doesn't match known patterns.
-    """
+    """Try to extract metadata from the filename as a fallback."""
     name = filepath.stem
 
-    # Try light frame pattern first
     m = LIGHT_PATTERN.match(name)
     if m:
         return {
@@ -261,7 +257,6 @@ def parse_filename(filepath: Path) -> dict | None:
             "seq": int(m.group("seq")),
         }
 
-    # Try calibration file pattern
     m = CALIB_PATTERN.match(name)
     if m:
         result = {
@@ -280,11 +275,12 @@ def parse_filename(filepath: Path) -> dict | None:
 # Directory scanner
 # ---------------------------------------------------------------------------
 
-FITS_EXTENSIONS = {".fit", ".fits", ".fit.gz", ".fits.gz", ".FIT", ".FITS", ".xisf"}
+FITS_EXTENSIONS = {".fit", ".fits", ".fit.gz", ".fits.gz", ".FIT", ".FITS"}
+XISF_EXTENSIONS = {".xisf", ".XISF"}
 
 
 def find_fits_files(root: Path, recursive: bool = True) -> Iterator[Path]:
-    """Find all FITS/XISF files in a directory tree."""
+    """Find all FITS files in a directory tree. XISF files are skipped."""
     pattern = "**/*" if recursive else "*"
     for path in root.glob(pattern):
         suffixes = "".join(path.suffixes).lower()
@@ -293,17 +289,12 @@ def find_fits_files(root: Path, recursive: bool = True) -> Iterator[Path]:
 
 
 def generate_group_key(frame: ScannedFrame) -> str:
-    """Generate a unique grouping key for a session.
-
-    Group by: object + date (day) + instrument + telescope + filter
-    """
+    """Generate a unique grouping key for a session."""
     date_str = frame.date_obs.strftime("%Y-%m-%d") if frame.date_obs else "unknown"
-    # Clean up component names for grouping
     obj = frame.object_name.strip().upper() or "UNKNOWN"
     inst = frame.instrume.strip() or "UNKNOWN"
     tel = frame.telescop.strip() or "UNKNOWN"
     filt = frame.filter_name.strip().upper() or "UNKNOWN"
-
     return f"{obj}|{date_str}|{inst}|{tel}|{filt}"
 
 
@@ -313,22 +304,23 @@ def scan_directory(
     dry_run: bool = False,
     verbose: bool = False,
 ) -> list[ScannedFrame]:
-    """Scan a directory for FITS files and extract metadata.
-
-    Args:
-        root: Root directory to scan
-        recursive: Whether to scan subdirectories
-        dry_run: If True, don't write to database
-        verbose: If True, print detailed progress
-
-    Returns:
-        List of ScannedFrame objects with extracted metadata
-    """
+    """Scan a directory for FITS files and extract metadata."""
     frames: list[ScannedFrame] = []
     errors: list[str] = []
+    xisf_skipped = 0
 
     files = list(find_fits_files(root, recursive=recursive))
+
+    # Count XISF files to report
+    pattern = "**/*" if recursive else "*"
+    for path in root.glob(pattern):
+        suffixes = "".join(path.suffixes).lower()
+        if any(suffixes.endswith(ext.lower()) for ext in XISF_EXTENSIONS):
+            xisf_skipped += 1
+
     console.print(f"Found [cyan]{len(files)}[/cyan] FITS files in {root}")
+    if xisf_skipped:
+        console.print(f"[dim]Skipping {xisf_skipped} XISF files (parser not yet implemented)[/dim]")
 
     with Progress() as progress:
         task = progress.add_task("Scanning FITS headers...", total=len(files))
@@ -354,13 +346,11 @@ def scan_directory(
                         if not frame.filter_name and "filter_name" in parsed:
                             frame.filter_name = parsed["filter_name"]
 
-                # If OBJECT is still empty, try to extract from filename
-                # Handles patterns like M42_Ha.fit, NGC7000_L_300s.fit, etc.
+                # FIX: If OBJECT is still empty, try to extract from filename
                 if not frame.object_name:
-                    # Try to extract object name from filename: M42, NGC7000, IC434, etc.
-                    name_match = re.match(r"^([A-Z]{1,2}\d+[a-zA-Z]?)_", frame.filename)
-                    if name_match:
-                        frame.object_name = name_match.group(1)
+                    extracted = _extract_object_from_filename(frame.filename)
+                    if extracted:
+                        frame.object_name = extracted
 
                 if frame.errors:
                     errors.extend(frame.errors)
