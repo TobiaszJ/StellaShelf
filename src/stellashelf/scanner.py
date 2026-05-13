@@ -15,7 +15,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Iterator
+from typing import Callable, Iterator
 
 from astropy.io import fits
 from rich.console import Console
@@ -303,13 +303,20 @@ def scan_directory(
     recursive: bool = True,
     dry_run: bool = False,
     verbose: bool = False,
+    progress_callback: Callable[[int, int, Path], None] | None = None,
 ) -> list[ScannedFrame]:
-    """Scan a directory for FITS files and extract metadata."""
+    """Scan a directory for FITS files and extract metadata.
+
+    Args:
+        progress_callback: Optional callback invoked as (processed, total, current_file)
+                          after each file is scanned.
+    """
     frames: list[ScannedFrame] = []
     errors: list[str] = []
     xisf_skipped = 0
 
     files = list(find_fits_files(root, recursive=recursive))
+    total = len(files)
 
     # Count XISF files to report
     pattern = "**/*" if recursive else "*"
@@ -318,12 +325,16 @@ def scan_directory(
         if any(suffixes.endswith(ext.lower()) for ext in XISF_EXTENSIONS):
             xisf_skipped += 1
 
-    console.print(f"Found [cyan]{len(files)}[/cyan] FITS files in {root}")
-    if xisf_skipped:
-        console.print(f"[dim]Skipping {xisf_skipped} XISF files (parser not yet implemented)[/dim]")
+    if not progress_callback:
+        console.print(f"Found [cyan]{total}[/cyan] FITS files in {root}")
+        if xisf_skipped:
+            console.print(f"[dim]Skipping {xisf_skipped} XISF files (parser not yet implemented)[/dim]")
+
+    if progress_callback:
+        progress_callback(0, total, Path())
 
     with Progress() as progress:
-        task = progress.add_task("Scanning FITS headers...", total=len(files))
+        task = progress.add_task("Scanning FITS headers...", total=total)
 
         for filepath in files:
             try:
@@ -361,6 +372,9 @@ def scan_directory(
                 errors.append(f"Error scanning {filepath}: {e}")
 
             progress.advance(task)
+
+            if progress_callback:
+                progress_callback(len(frames), total, filepath)
 
     if errors:
         console.print(f"\n[yellow]{len(errors)} warnings/errors:[/yellow]")

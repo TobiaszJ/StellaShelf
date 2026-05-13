@@ -127,6 +127,16 @@
             text-decoration: none;
         }
         .btn:hover { opacity: 0.9; }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .btn-danger {
+            background: #da3633;
+        }
+        .btn-success {
+            background: var(--accent2);
+        }
         .back-link { margin-bottom: 16px; }
         .session-detail { margin-top: 24px; }
         .session-meta {
@@ -145,6 +155,117 @@
         .meta-item .value { font-size: 16px; font-weight: 500; margin-top: 4px; }
         .loading { text-align: center; padding: 40px; color: var(--text-muted); }
         .empty { text-align: center; padding: 40px; color: var(--text-muted); }
+
+        /* Scan tab styles */
+        .scan-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: flex-end;
+            margin-bottom: 24px;
+        }
+        .scan-controls label {
+            font-size: 13px;
+            color: var(--text-muted);
+            display: block;
+            margin-bottom: 4px;
+        }
+        .scan-controls select,
+        .scan-controls input[type="text"] {
+            background: var(--bg);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 14px;
+            min-width: 200px;
+        }
+        .scan-controls select:focus,
+        .scan-controls input[type="text"]:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        .progress-container {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 24px;
+            display: none;
+        }
+        .progress-container.visible {
+            display: block;
+        }
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .progress-header .status-text {
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .progress-header .status-text.scanning { color: var(--accent); }
+        .progress-header .status-text.importing { color: var(--accent3); }
+        .progress-header .status-text.done { color: var(--accent2); }
+        .progress-header .status-text.error { color: #f85149; }
+        .progress-bar-bg {
+            width: 100%;
+            height: 24px;
+            background: var(--bg);
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 16px;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), var(--accent2));
+            border-radius: 12px;
+            transition: width 0.3s ease;
+            min-width: 0;
+        }
+        .progress-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 12px;
+        }
+        .progress-stat {
+            text-align: center;
+        }
+        .progress-stat .num {
+            font-size: 20px;
+            font-weight: 700;
+        }
+        .progress-stat .lbl {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+        .current-file {
+            margin-top: 12px;
+            font-size: 12px;
+            color: var(--text-muted);
+            font-family: monospace;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .scan-info {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            font-size: 13px;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+        .scan-info code {
+            background: var(--bg);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
     </style>
 </head>
 <body>
@@ -155,6 +276,7 @@
             <a onclick="showPage('targets')" id="nav-targets">Targets</a>
             <a onclick="showPage('sessions')" id="nav-sessions">Sessions</a>
             <a onclick="showPage('equipment')" id="nav-equipment">Equipment</a>
+            <a onclick="showPage('scan')" id="nav-scan">Scan</a>
         </div>
     </nav>
 
@@ -162,12 +284,19 @@
 
     <script>
         const API = '/api/v1';
+        let scanPollInterval = null;
 
         // Navigation
         function showPage(page, param) {
             document.querySelectorAll('.nav-links a').forEach(a => a.classList.remove('active'));
-            const navEl = document.getElementById(`nav-${page}`);
+            const navEl = document.getElementById('nav-' + page);
             if (navEl) navEl.classList.add('active');
+
+            // Stop scan polling when leaving scan page
+            if (page !== 'scan' && scanPollInterval) {
+                clearInterval(scanPollInterval);
+                scanPollInterval = null;
+            }
 
             switch(page) {
                 case 'dashboard': renderDashboard(); break;
@@ -176,12 +305,26 @@
                 case 'equipment': renderEquipment(); break;
                 case 'target': renderTargetDetail(param); break;
                 case 'session': renderSessionDetail(param); break;
+                case 'scan': renderScan(); break;
             }
         }
 
         async function api(path) {
-            const res = await fetch(`${API}${path}`);
-            if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+            const res = await fetch(API + path);
+            if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
+            return res.json();
+        }
+
+        async function apiPost(path, body) {
+            const res = await fetch(API + path, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ detail: res.statusText }));
+                throw new Error(err.detail || res.statusText);
+            }
             return res.json();
         }
 
@@ -220,7 +363,7 @@
                 </div>
                 <div class="section">
                     <h2>Recent Targets</h2>
-                    ${targets.length === 0 ? '<div class="empty">No targets found. Run <code>stellashelf scan</code> to import your data.</div>' : `
+                    ${targets.length === 0 ? '<div class="empty">No targets found. Run a scan to import your data.</div>' : `
                     <table>
                         <thead><tr><th>Target</th><th>Sessions</th><th>Type</th></tr></thead>
                         <tbody>
@@ -243,9 +386,8 @@
             app.innerHTML = '<div class="loading">Loading targets...</div>';
             const targets = await api('/targets');
 
-            // Fetch session counts for each target
             const targetsWithCounts = await Promise.all(targets.map(async t => {
-                const sessions = await api(`/targets/${t.id}/sessions`);
+                const sessions = await api('/targets/' + t.id + '/sessions');
                 return { ...t, sessionCount: sessions.length };
             }));
 
@@ -275,8 +417,8 @@
             app.innerHTML = '<div class="loading">Loading target...</div>';
 
             const [target, sessions] = await Promise.all([
-                api(`/targets/${targetId}`),
-                api(`/targets/${targetId}/sessions`)
+                api('/targets/' + targetId),
+                api('/targets/' + targetId + '/sessions')
             ]);
 
             app.innerHTML = `
@@ -286,7 +428,7 @@
                 <div class="section">
                     <h2>${target.name}</h2>
                     <p style="color: var(--text-muted); margin-bottom: 24px;">
-                        ${target.object_type || 'Unknown type'} ${target.constellation ? `in ${target.constellation}` : ''}
+                        ${target.object_type || 'Unknown type'} ${target.constellation ? 'in ' + target.constellation : ''}
                     </p>
                 </div>
                 <div class="section">
@@ -341,10 +483,9 @@
             const app = document.getElementById('app');
             app.innerHTML = '<div class="loading">Loading session...</div>';
 
-            const session = await api(`/sessions/${sessionId}`);
-            const frames = await api(`/frames?session_id=${sessionId}&limit=1000`);
+            const session = await api('/sessions/' + sessionId);
+            const frames = await api('/frames?session_id=' + sessionId + '&limit=1000');
 
-            // Group frames by filter
             const byFilter = {};
             frames.forEach(f => {
                 const key = f.filter_name || 'unknown';
@@ -396,7 +537,7 @@
                                 `).join('')}
                             </tbody>
                         </table>
-                        ${filterFrames.length > 20 ? `<p style="color: var(--text-muted); margin-top: 8px;">... and ${filterFrames.length - 20} more</p>` : ''}
+                        ${filterFrames.length > 20 ? '<p style="color: var(--text-muted); margin-top: 8px;">... and ' + (filterFrames.length - 20) + ' more</p>' : ''}
                     `).join('')}
                 </div>
             `;
@@ -444,6 +585,200 @@
                     </table>
                 </div>
             `;
+        }
+
+        // --- Scan ---
+        const COMMON_PATHS = [
+            '/mnt/data/Astro/astro',
+            '/mnt/data/Astro/astro/ASI533MC',
+            '/mnt/data/Astro/astro/ASI2600MC',
+            '/mnt/data/Astro/astro/ASI1600MM',
+            '/mnt/data/Astro',
+        ];
+
+        async function renderScan() {
+            const app = document.getElementById('app');
+
+            // Check current scan status first
+            let status;
+            try {
+                status = await api('/scan/status');
+            } catch (e) {
+                status = { running: false, phase: 'idle' };
+            }
+
+            const isRunning = status.running;
+            const showProgress = isRunning || status.phase === 'done' || status.phase === 'error';
+
+            const pathOptions = COMMON_PATHS.map(p => `<option value="${p}">${p}</option>`).join('');
+
+            app.innerHTML = `
+                <div class="section">
+                    <h2>🔭 Scan FITS Files</h2>
+                    <div class="scan-info" style="margin-bottom: 24px;">
+                        Scans a directory for FITS files, extracts metadata from headers, and imports into the database.
+                        Duplicate files (by filepath) are automatically skipped.
+                        The scan runs in the background — you can navigate away and return to check progress.
+                    </div>
+
+                    <div class="scan-controls">
+                        <div>
+                            <label for="scan-path-select">Presets</label>
+                            <select id="scan-path-select" onchange="document.getElementById('scan-path-text').value = this.value">
+                                <option value="">-- Select a preset --</option>
+                                ${pathOptions}
+                            </select>
+                        </div>
+                        <div>
+                            <label for="scan-path-text">Custom path</label>
+                            <input type="text" id="scan-path-text" placeholder="/mnt/data/Astro/..." style="min-width: 350px;">
+                        </div>
+                        <div>
+                            <label>&nbsp;</label>
+                            <button class="btn ${isRunning ? '' : 'btn-success'}" id="start-scan-btn" onclick="startScan()" ${isRunning ? 'disabled' : ''}>
+                                ${isRunning ? 'Scan Running...' : 'Start Scan'}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="progress-container ${showProgress ? 'visible' : ''}" id="progress-container">
+                        <div class="progress-header">
+                            <span class="status-text" id="status-text">${getStatusText(status)}</span>
+                            <span id="status-percent" style="font-size: 14px; color: var(--text-muted);">${getPercent(status)}%</span>
+                        </div>
+                        <div class="progress-bar-bg">
+                            <div class="progress-bar-fill" id="progress-fill" style="width: ${getPercent(status)}%"></div>
+                        </div>
+                        <div class="progress-stats">
+                            <div class="progress-stat">
+                                <div class="num" id="stat-total">${status.total || 0}</div>
+                                <div class="lbl">Total</div>
+                            </div>
+                            <div class="progress-stat">
+                                <div class="num" id="stat-processed" style="color: var(--accent);">${status.processed || 0}</div>
+                                <div class="lbl">Processed</div>
+                            </div>
+                            <div class="progress-stat">
+                                <div class="num" id="stat-imported" style="color: var(--accent2);">${status.imported || 0}</div>
+                                <div class="lbl">Imported</div>
+                            </div>
+                            <div class="progress-stat">
+                                <div class="num" id="stat-skipped" style="color: var(--accent3);">${status.skipped || 0}</div>
+                                <div class="lbl">Skipped</div>
+                            </div>
+                        </div>
+                        <div class="current-file" id="current-file">${status.current_file || ''}</div>
+                    </div>
+                </div>
+            `;
+
+            // If scan is running, start polling
+            if (isRunning) {
+                startPolling();
+            }
+        }
+
+        function getStatusText(status) {
+            switch(status.phase) {
+                case 'scanning': return 'Scanning FITS headers...';
+                case 'importing': return 'Importing to database...';
+                case 'done': return 'Done: ' + status.imported + ' frames imported';
+                case 'error': return 'Error: ' + (status.error || 'Unknown error');
+                default: return 'Idle';
+            }
+        }
+
+        function getStatusClass(status) {
+            return status.phase || 'idle';
+        }
+
+        function getPercent(status) {
+            if (!status.total || status.total === 0) return 0;
+            return Math.round((status.processed / status.total) * 100);
+        }
+
+        async function startScan() {
+            const path = document.getElementById('scan-path-text').value.trim();
+            if (!path) {
+                alert('Please select or enter a scan path.');
+                return;
+            }
+
+            const btn = document.getElementById('start-scan-btn');
+            btn.disabled = true;
+            btn.textContent = 'Starting...';
+
+            try {
+                const result = await apiPost('/scan', { path: path, recursive: true });
+                console.log('Scan started:', result);
+                startPolling();
+            } catch (e) {
+                alert('Failed to start scan: ' + e.message);
+                btn.disabled = false;
+                btn.textContent = 'Start Scan';
+            }
+        }
+
+        function startPolling() {
+            if (scanPollInterval) {
+                clearInterval(scanPollInterval);
+            }
+
+            scanPollInterval = setInterval(async () => {
+                try {
+                    const status = await api('/scan/status');
+                    updateProgressUI(status);
+
+                    if (!status.running) {
+                        clearInterval(scanPollInterval);
+                        scanPollInterval = null;
+                        // Re-enable button after a short delay
+                        setTimeout(() => {
+                            const btn = document.getElementById('start-scan-btn');
+                            if (btn) {
+                                btn.disabled = false;
+                                btn.textContent = 'Start Scan';
+                                btn.className = 'btn btn-success';
+                            }
+                        }, 500);
+                    }
+                } catch (e) {
+                    console.error('Poll error:', e);
+                }
+            }, 500);
+        }
+
+        function updateProgressUI(status) {
+            const container = document.getElementById('progress-container');
+            if (container) container.classList.add('visible');
+
+            const statusText = document.getElementById('status-text');
+            if (statusText) {
+                statusText.textContent = getStatusText(status);
+                statusText.className = 'status-text ' + getStatusClass(status);
+            }
+
+            const percent = getPercent(status);
+            const pctEl = document.getElementById('status-percent');
+            if (pctEl) pctEl.textContent = percent + '%';
+
+            const fill = document.getElementById('progress-fill');
+            if (fill) fill.style.width = percent + '%';
+
+            const totalEl = document.getElementById('stat-total');
+            if (totalEl) totalEl.textContent = status.total || 0;
+
+            const processedEl = document.getElementById('stat-processed');
+            if (processedEl) processedEl.textContent = status.processed || 0;
+
+            const importedEl = document.getElementById('stat-imported');
+            if (importedEl) importedEl.textContent = status.imported || 0;
+
+            const skippedEl = document.getElementById('stat-skipped');
+            if (skippedEl) skippedEl.textContent = status.skipped || 0;
+
+            const fileEl = document.getElementById('current-file');
+            if (fileEl) fileEl.textContent = status.current_file || '';
         }
 
         // Initial render
