@@ -4,6 +4,10 @@ import Targets from '@/views/Targets.vue'
 import Sessions from '@/views/Sessions.vue'
 import Equipment from '@/views/Equipment.vue'
 import Scan from '@/views/Scan.vue'
+import Search from '@/views/Search.vue'
+import Settings from '@/views/Settings.vue'
+import Platesolve from '@/views/Platesolve.vue'
+import Help from '@/views/Help.vue'
 import TargetDetail from '@/views/TargetDetail.vue'
 import SessionDetail from '@/views/SessionDetail.vue'
 
@@ -16,6 +20,10 @@ const router = createRouter({
     { path: '/sessions', name: 'sessions', component: Sessions },
     { path: '/sessions/:id', name: 'session-detail', component: SessionDetail, props: true },
     { path: '/equipment', name: 'equipment', component: Equipment },
+    { path: '/search', name: 'search', component: Search },
+    { path: '/settings', name: 'settings', component: Settings },
+    { path: '/platesolve', name: 'platesolve', component: Platesolve },
+    { path: '/help', name: 'help', component: Help },
     { path: '/scan', name: 'scan', component: Scan },
   ],
 })

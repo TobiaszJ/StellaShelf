@@ -222,6 +222,18 @@ class CalibrationFile(Base):
     scanned_at = Column(DateTime, default=lambda: datetime.now())
 
 
+class Setting(Base):
+    """Application settings (key/value pairs)."""
+
+    __tablename__ = "settings"
+
+    id = Column(Integer, primary_key=True)
+    key = Column(String(128), nullable=False, unique=True, index=True)
+    value = Column(Text, nullable=True)
+    description = Column(String(255), nullable=True)
+    updated_at = Column(DateTime, default=lambda: datetime.now(), onupdate=lambda: datetime.now())
+
+
 # ---------------------------------------------------------------------------
 # FTS5 full-text search
 # ---------------------------------------------------------------------------

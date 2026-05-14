@@ -62,13 +62,19 @@ export interface Telescope {
   total_exposure_h: number
 }
 
+export interface FilterStat {
+  name: string
+  frame_count: number
+  total_exposure_h: number
+}
+
 export interface DashboardData {
   total_exposure_h: number
   total_frames: number
   total_sessions: number
   total_targets: number
   top_targets: Array<{ id: number; name: string; total_exposure_h: number; session_count: number }>
-  recent_sessions: Array<{ id: number; target_id: number; date_obs: string; total_exposure_h: number; frame_count: number }>
+  recent_sessions: Array<{ id: number; target_id: number; target_name: string; date_obs: string; total_exposure_h: number; frame_count: number }>
   cameras: Array<{ id: number; name: string; short_name: string | null; frame_count: number; total_exposure_h: number }>
 }
 

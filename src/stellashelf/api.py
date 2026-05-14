@@ -11,12 +11,12 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func as sa_func
 
-from stellashelf.db import init_db, Target, Session as ObsSession, Frame, Camera, Telescope, CalibrationFile
+from stellashelf.db import init_db, Target, Session as ObsSession, Frame, Camera, Telescope, CalibrationFile, Setting
 from stellashelf.importer import ImporterService
 
 DB_PATH = Path("~/stellashelf/stellashelf.db").expanduser().resolve()
@@ -223,6 +223,55 @@ def health_check():
     return {"status": "ok", "db": str(DB_PATH)}
 
 
+@app.get("/api/v1/search")
+def search_all(
+    q: str = Query(..., description="Search query"),
+    limit: int = Query(20, ge=1, le=100),
+):
+    """Full-text search across targets, sessions, and frames via FTS5."""
+    engine, SessionLocal = get_session_local()
+    with SessionLocal() as session:
+        # Search frames via FTS5
+        fts_results = (
+            session.query(Frame.id, Frame.object_name, Frame.filename, Frame.frame_type, Frame.date_obs)
+            .filter(
+                text("frames_fts MATCH :q"),
+            )
+            .params(q=q)
+            .limit(limit)
+            .all()
+        )
+
+        # Search targets by name
+        target_results = (
+            session.query(Target.id, Target.name, Target.object_type)
+            .filter(Target.name.ilike(f"%{q}%"))
+            .limit(limit)
+            .all()
+        )
+
+        # Search sessions by target name
+        session_results = (
+            session.query(ObsSession.id, ObsSession.group_key, ObsSession.date_obs, ObsSession.frame_count)
+            .join(Target, Target.id == ObsSession.target_id)
+            .filter(Target.name.ilike(f"%{q}%"))
+            .limit(limit)
+            .all()
+        )
+
+        return {
+            "targets": [{"id": t.id, "name": t.name, "type": t.object_type} for t in target_results],
+            "sessions": [
+                {"id": s.id, "group_key": s.group_key, "date_obs": str(s.date_obs) if s.date_obs else None, "frame_count": s.frame_count}
+                for s in session_results
+            ],
+            "frames": [
+                {"id": f.id, "object_name": f.object_name, "filename": f.filename, "frame_type": f.frame_type}
+                for f in fts_results
+            ],
+        }
+
+
 @app.post("/api/v1/scan")
 def start_scan(request: ScanRequest):
     """Start a background scan of FITS files."""
@@ -292,7 +341,12 @@ def get_dashboard():
 
         # Recent 10 sessions
         recent = (
-            session.query(ObsSession)
+            session.query(
+                ObsSession.id, ObsSession.target_id, ObsSession.date_obs,
+                ObsSession.total_exposure_h, ObsSession.frame_count,
+                Target.name.label("target_name")
+            )
+            .join(Target, Target.id == ObsSession.target_id)
             .filter(ObsSession.date_obs != None)
             .order_by(ObsSession.date_obs.desc())
             .limit(10)
@@ -323,7 +377,10 @@ def get_dashboard():
                 for t in top_targets
             ],
             "recent_sessions": [
-                {"id": s.id, "target_id": s.target_id, "date_obs": s.date_obs, "total_exposure_h": round(s.total_exposure_h, 1), "frame_count": s.frame_count}
+                {
+                    "id": s.id, "target_id": s.target_id, "target_name": s.target_name,
+                    "date_obs": s.date_obs, "total_exposure_h": round(s.total_exposure_h, 1), "frame_count": s.frame_count
+                }
                 for s in recent
             ],
             "cameras": [
@@ -340,6 +397,8 @@ def get_dashboard():
 @app.get("/api/v1/targets", response_model=TargetListResponse)
 def list_targets(
     search: Optional[str] = Query(None, description="Search targets by name"),
+    object_type: Optional[str] = Query(None, description="Filter by object type (e.g. Galaxy, Nebula)"),
+    constellation: Optional[str] = Query(None, description="Filter by constellation"),
     sort_by: str = Query("name"),
     sort_order: str = Query("asc"),
     page: int = Query(1, ge=1),
@@ -356,6 +415,10 @@ def list_targets(
 
         if search:
             q = q.filter(Target.name.ilike(f"%{search}%"))
+        if object_type:
+            q = q.filter(Target.object_type == object_type)
+        if constellation:
+            q = q.filter(Target.constellation == constellation)
 
         # Group by target
         q = q.group_by(Target.id, Target.name, Target.object_type, Target.constellation, Target.ra_deg, Target.dec_deg)
@@ -381,6 +444,16 @@ def list_targets(
         ]
 
         return TargetListResponse(total=total, page=page, page_size=page_size, pages=pages, items=items)
+
+
+@app.get("/api/v1/targets/types")
+def list_target_types():
+    """Get distinct object types and constellations for filter dropdowns."""
+    engine, SessionLocal = get_session_local()
+    with SessionLocal() as session:
+        types = [row[0] for row in session.query(Target.object_type).distinct().filter(Target.object_type != None).order_by(Target.object_type).all()]
+        constellations = [row[0] for row in session.query(Target.constellation).distinct().filter(Target.constellation != None).order_by(Target.constellation).all()]
+        return {"object_types": types, "constellations": constellations}
 
 
 @app.get("/api/v1/targets/{target_id}", response_model=TargetSchema)
@@ -546,6 +619,45 @@ def get_session(session_id: int):
 # Frames
 # ---------------------------------------------------------------------------
 
+
+@app.get("/api/v1/sessions/{session_id}/stats")
+def get_session_stats(session_id: int):
+    """Get aggregated stats for a session: exposure per filter, frames per type."""
+    engine, SessionLocal = get_session_local()
+    with SessionLocal() as session:
+        obs = session.query(ObsSession).get(session_id)
+        if not obs:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        # Frames per type
+        type_stats = (
+            session.query(Frame.frame_type, sa_func.count(Frame.id))
+            .filter(Frame.session_id == session_id)
+            .group_by(Frame.frame_type)
+            .all()
+        )
+
+        # Exposure per filter
+        filter_stats = (
+            session.query(
+                Frame.filter_name,
+                sa_func.count(Frame.id).label("frame_count"),
+                sa_func.sum(Frame.exposure).label("total_s"),
+            )
+            .filter(Frame.session_id == session_id)
+            .group_by(Frame.filter_name)
+            .order_by(sa_func.sum(Frame.exposure).desc())
+            .all()
+        )
+
+        return {
+            "frame_type_counts": {row[0] or "UNKNOWN": row[1] for row in type_stats},
+            "exposure_per_filter": [
+                {"filter": r.filter_name or "UNKNOWN", "frames": r.frame_count, "total_s": r.total_s}
+                for r in filter_stats
+            ],
+        }
+
 @app.get("/api/v1/frames", response_model=FrameListResponse)
 def list_frames(
     session_id: Optional[int] = Query(None),
@@ -584,6 +696,70 @@ def list_frames(
         ]
 
         return FrameListResponse(total=total, page=page, page_size=page_size, pages=pages, items=items)
+
+
+@app.get("/api/v1/frames/{frame_id}/thumbnail")
+def get_frame_thumbnail(frame_id: int):
+    """Get a JPEG thumbnail for a specific frame."""
+    engine, SessionLocal = get_session_local()
+    with SessionLocal() as session:
+        frame = session.query(Frame).get(frame_id)
+        if not frame:
+            raise HTTPException(status_code=404, detail="Frame not found")
+        
+        fp = Path(frame.filepath)
+        if not fp.exists():
+            raise HTTPException(status_code=404, detail="File not found on disk")
+        
+        from stellashelf.scanner import generate_thumbnail
+        thumb_bytes = generate_thumbnail(fp)
+        if thumb_bytes is None:
+            raise HTTPException(status_code=500, detail="Failed to generate thumbnail")
+        
+        return Response(content=thumb_bytes, media_type="image/jpeg")
+
+
+@app.get("/api/v1/targets/{target_id}/thumbnails")
+def get_target_thumbnails(target_id: int, limit: int = Query(6, ge=1, le=20)):
+    """Get thumbnails for recent frames of a target."""
+    engine, SessionLocal = get_session_local()
+    with SessionLocal() as session:
+        target = session.query(Target).get(target_id)
+        if not target:
+            raise HTTPException(status_code=404, detail="Target not found")
+        
+        recent_frames = (
+            session.query(Frame)
+            .filter(Frame.object_name.ilike(f"%{target.name}%"), Frame.frame_type == "LIGHT")
+            .order_by(Frame.date_obs.desc())
+            .limit(limit)
+            .all()
+        )
+        
+        results = []
+        for f in recent_frames:
+            fp = Path(f.filepath)
+            thumb_url = None
+            if fp.exists():
+                from stellashelf.scanner import generate_thumbnail
+                thumb_bytes = generate_thumbnail(fp)
+                if thumb_bytes:
+                    import base64
+                    thumb_url = f"data:image/jpeg;base64,{base64.b64encode(thumb_bytes).decode()}"
+            
+            results.append({
+                "id": f.id,
+                "filename": f.filename,
+                "filter_name": f.filter_name,
+                "exposure": f.exposure,
+                "date_obs": str(f.date_obs) if f.date_obs else None,
+                "thumbnail": thumb_url,
+            })
+        
+        return results
+
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -640,6 +816,32 @@ def list_telescopes():
         ]
 
 
+@app.get("/api/v1/filters")
+def list_filters():
+    """List all unique filter names with usage statistics."""
+    engine, SessionLocal = get_session_local()
+    with SessionLocal() as session:
+        results = (
+            session.query(
+                Frame.filter_name,
+                sa_func.count(Frame.id).label("frame_count"),
+                sa_func.coalesce(sa_func.sum(Frame.exposure), 0).label("total_s"),
+            )
+            .filter(Frame.filter_name != None, Frame.filter_name != "")
+            .group_by(Frame.filter_name)
+            .order_by(sa_func.count(Frame.id).desc())
+            .all()
+        )
+        return [
+            {
+                "name": r.filter_name,
+                "frame_count": r.frame_count,
+                "total_exposure_h": round((r.total_s or 0) / 3600, 1),
+            }
+            for r in results
+        ]
+
+
 # ---------------------------------------------------------------------------
 # Statistics
 # ---------------------------------------------------------------------------
@@ -658,6 +860,69 @@ def get_stats():
             "calibration_files": sess.query(CalibrationFile).count(),
             "total_exposure_h": round(total_exposure_h, 1),
         }
+
+
+# ---------------------------------------------------------------------------
+# Settings
+# ---------------------------------------------------------------------------
+
+
+class SettingSchema(BaseModel):
+    key: str
+    value: Optional[str]
+    description: Optional[str]
+
+
+@app.get("/api/v1/settings", response_model=list[SettingSchema])
+def list_settings():
+    """Get all application settings."""
+    engine, SessionLocal = get_session_local()
+    with SessionLocal() as sess:
+        results = sess.query(Setting).all()
+        return [{"key": r.key, "value": r.value, "description": r.description} for r in results]
+
+
+@app.post("/api/v1/settings")
+def update_settings(settings: list[SettingSchema]):
+    """Update application settings (upsert by key)."""
+    engine, SessionLocal = get_session_local()
+    with SessionLocal() as sess:
+        for s in settings:
+            existing = sess.query(Setting).filter(Setting.key == s.key).first()
+            if existing:
+                existing.value = s.value
+            else:
+                setting = Setting(key=s.key, value=s.value, description=s.description)
+                sess.add(setting)
+        sess.commit()
+    return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Platesolving
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/v1/platesolve")
+def run_platesolve():
+    """Run ASTAP platesolving on all frames without RA/Dec coordinates."""
+    engine, SessionLocal = get_session_local()
+    with SessionLocal() as sess:
+        # Find frames without coordinates
+        unplated = (
+            sess.query(Frame.id, Frame.filepath)
+            .filter(Frame.ra_deg == None, Frame.dec_deg == None)
+            .count()
+        )
+        
+        return {
+            "status": "not_implemented",
+            "frames_without_coordinates": unplated,
+            "message": "ASTAP integration is planned. Configure the ASTAP binary path in Settings.",
+        }
+
+
+
 
 
 # ---------------------------------------------------------------------------

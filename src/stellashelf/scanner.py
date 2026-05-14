@@ -11,12 +11,14 @@ Supports:
 """
 
 import hashlib
+import io
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, Iterator, Optional
 
+import numpy as np
 from astropy.io import fits
 from rich.console import Console
 from rich.progress import Progress
@@ -376,6 +378,56 @@ def generate_group_key(frame: ScannedFrame) -> str:
     tel = frame.telescop.strip() or "UNKNOWN"
     filt = frame.filter_name.strip().upper() or "UNKNOWN"
     return f"{obj}|{date_str}|{inst}|{tel}|{filt}"
+
+
+def generate_thumbnail(filepath: Path, size: int = 200) -> Optional[bytes]:
+    """Generate a JPEG thumbnail from a FITS file.
+    
+    Args:
+        filepath: Path to the FITS file.
+        size: Maximum dimension (width/height) in pixels.
+    
+    Returns:
+        JPEG bytes, or None if thumbnail generation fails.
+    """
+    try:
+        with fits.open(str(filepath)) as hdul:
+            # Get image data from the last HDU (usually has the data)
+            data = None
+            for hdu in reversed(hdul):
+                if hdu.data is not None:
+                    data = hdu.data
+                    break
+            
+            if data is None:
+                return None
+            
+            # Convert to 2D if multi-dimensional
+            if data.ndim > 2:
+                data = data[0] if data.shape[0] == 1 else np.mean(data, axis=0)
+            
+            # Handle NaN/Inf
+            data = np.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0)
+            
+            # Normalize to 0-255 using percentiles for better contrast
+            p_low, p_high = np.percentile(data, [5, 95])
+            if p_high > p_low:
+                data = np.clip((data - p_low) / (p_high - p_low) * 255, 0, 255)
+            else:
+                data = np.clip(data / (np.max(data) or 1) * 255, 0, 255)
+            
+            data = data.astype(np.uint8)
+            
+            # Resize
+            from PIL import Image
+            img = Image.fromarray(data, mode='L')
+            img.thumbnail((size, size), Image.LANCZOS)
+            
+            buf = io.BytesIO()
+            img.save(buf, format='JPEG', quality=85)
+            return buf.getvalue()
+    except Exception:
+        return None
 
 
 def scan_directory(
