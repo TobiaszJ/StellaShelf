@@ -259,7 +259,7 @@ def scan_fits_file(filepath: Path) -> ScannedFrame:
                     frame.errors.append(f"Invalid EXPOSURE value: {exposure}")
 
             # Fix: QHY8L stores long exposures in milliseconds
-            if frame.instrume == "QHY8L" and frame.exposure is not None and frame.exposure >= 10000:
+            if "QHY8L" in frame.instrume and frame.exposure is not None and frame.exposure >= 10000:
                 frame.exposure /= 1000.0
 
             gain = header.get("GAIN")
