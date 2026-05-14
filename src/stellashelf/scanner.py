@@ -63,6 +63,70 @@ def _parse_dms_to_degrees(dms_str: str) -> float | None:
 
 
 # ---------------------------------------------------------------------------
+# Path-based Equipment Extraction
+# ---------------------------------------------------------------------------
+
+# Known camera folder names under Astro/astro/
+_KNOWN_CAMERAS = frozenset({
+    "ASI183MMPro",
+    "ASI2600MMPro",
+    "ASI2600MMPro2",
+    "ASI294MMPro",
+    "ASI533MCPro",
+})
+
+# Regex: match Astro/astro/<CAMERA>/ where CAMERA is a known camera name
+_CAMERA_PATH_RE = re.compile(
+    r"(?:^|/)Astro/astro/(" + "|".join(re.escape(c) for c in sorted(_KNOWN_CAMERAS)) + r")/",
+    re.IGNORECASE,
+)
+
+# Regex: match Astro/astro/<CAMERA>/_<TELESCOPE>/ — capture telescope without leading underscore
+_TELESCOPE_PATH_RE = re.compile(
+    r"(?:^|/)Astro/astro/(?:[^/]+)/_([^/]+)/",
+    re.IGNORECASE,
+)
+
+
+def _extract_camera_from_path(filepath: Path) -> str | None:
+    """Extract camera name from filepath matching Astro/astro/{CAMERA}/ pattern.
+
+    Args:
+        filepath: Path to the FITS file.
+
+    Returns:
+        Camera name string if found, None otherwise.
+    """
+    if not filepath:
+        return None
+    path_str = str(filepath)
+    match = _CAMERA_PATH_RE.search(path_str)
+    if match:
+        return match.group(1)
+    return None
+
+
+def _extract_telescope_from_path(filepath: Path) -> str | None:
+    """Extract telescope name from filepath matching Astro/astro/{CAMERA}/_{TELESCOPE}/.
+
+    Strips the leading underscore from telescope folder names.
+
+    Args:
+        filepath: Path to the FITS file.
+
+    Returns:
+        Telescope name string if found, None otherwise.
+    """
+    if not filepath:
+        return None
+    path_str = str(filepath)
+    match = _TELESCOPE_PATH_RE.search(path_str)
+    if match:
+        return match.group(1)
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Data classes for scanned metadata
 # ---------------------------------------------------------------------------
 
@@ -238,10 +302,12 @@ def scan_fits_file(filepath: Path) -> ScannedFrame:
         with fits.open(str(filepath)) as hdul:
             header = _extract_header(hdul)
 
-            # String fields
+            # String fields — path extraction is PRIMARY, FITS header is fallback
             frame.object_name = str(header.get("OBJECT", "")).strip()
-            frame.instrume = str(header.get("INSTRUME", "")).strip()
-            frame.telescop = str(header.get("TELESCOP", "")).strip()
+            path_camera = _extract_camera_from_path(filepath)
+            frame.instrume = path_camera if path_camera else str(header.get("INSTRUME", "")).strip()
+            path_telescope = _extract_telescope_from_path(filepath)
+            frame.telescop = path_telescope if path_telescope else str(header.get("TELESCOP", "")).strip()
             frame.filter_name = str(header.get("FILTER", "")).strip()
             frame.site_name = str(header.get("SITENAME", "")).strip()
             frame.observer = str(header.get("OBSERVER", "")).strip()
