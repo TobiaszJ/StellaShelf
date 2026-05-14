@@ -841,9 +841,10 @@ def get_stats():
 # Static files (frontend)
 # ---------------------------------------------------------------------------
 
-FRONTEND_DIR = Path(__file__).resolve().parent.parent.parent / "frontend"
+# Vue 3 SPA build output
+FRONTEND_DIR = Path(__file__).resolve().parent.parent.parent / "frontend-vue" / "dist"
 if FRONTEND_DIR.exists():
-    app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
+    app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIR / "assets")), name="assets")
 
     @app.get("/", response_class=HTMLResponse)
     async def index():
