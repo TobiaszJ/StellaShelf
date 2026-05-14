@@ -172,6 +172,11 @@ def scan_fits_file(filepath: Path) -> ScannedFrame:
             exposure = header.get("EXPOSURE")
             frame.exposure = float(exposure) if exposure is not None else None
 
+            # Fix: QHY8L stores long exposures in milliseconds (header says 600000 for 600s)
+            # All QHY8L values >= 10000 are in ms and need to be divided by 1000
+            if frame.instrume == "QHY8L" and frame.exposure is not None and frame.exposure >= 10000:
+                frame.exposure /= 1000.0
+
             gain = header.get("GAIN")
             frame.gain = int(gain) if gain is not None else None
 

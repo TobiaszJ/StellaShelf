@@ -204,7 +204,7 @@ class CalibrationFile(Base):
     __tablename__ = "calibration_files"
 
     id = Column(Integer, primary_key=True)
-    camera_id = Column(Integer, ForeignKey("cameras.id"), nullable=False)
+    camera_id = Column(Integer, ForeignKey("cameras.id"), nullable=True)
     cal_type = Column(String(32), nullable=False)
     exposure_s = Column(Float, nullable=True)
     gain = Column(Integer, nullable=True)
