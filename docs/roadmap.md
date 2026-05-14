@@ -1,26 +1,28 @@
 # Roadmap
 
-## Current Status: Foundation Complete ✅
+## Current Status: Browse & Search + Settings Complete ✅
 
-The core scanning, database, and API infrastructure is operational. The Vue 3 frontend provides a modern browsing experience.
+The core scanning, database, and API infrastructure is operational. The Vue 3 frontend provides a modern browsing experience with 12 views, search, thumbnails, dark mode, and settings.
+
+## Completed Milestones
+
+### Milestone 3 — Browse & Search Enhancements ✅
+
+- [x] Targets overview: filterable/sortable table with badges (object_type, constellation filters)
+- [x] Session detail view: frame list with pagination, frame type filter, exposure per filter aggregates
+- [x] Equipment catalog: cameras, telescopes, filters with sortable tabs and pagination
+- [x] Full-text search across all metadata (FTS5-powered API + Search.vue)
+- [x] Dashboard: stats, top targets, cameras, ECharts bar chart, recent sessions
+- [x] Thumbnail generation for sample frames (FITS → JPEG, auto-generated after import)
+
+### Milestone 4 — Settings & Polish ✅
+
+- [x] Settings page (general config, equipment override names)
+- [x] Dark mode (CSS variables, system preference auto-detect, manual toggle)
+- [x] ASTAP platesolving for unidentified objects (CLI integration, API endpoint, Platesolve.vue)
+- [x] Documentation site / User guide (Help.vue with formats, shortcuts, database info)
 
 ## Upcoming Milestones
-
-### Milestone 3 — Browse & Search Enhancements (Week 5-6)
-
-- [ ] Targets overview: filterable/sortable table with badges
-- [ ] Session detail view: frame list, calibration status, exposure totals
-- [ ] Equipment catalog: cameras, telescopes, filters
-- [ ] Full-text search across all metadata
-- [ ] Dashboard: stats (total objects, sessions, exposure hours, storage)
-- [ ] Thumbnail generation for sample frames
-
-### Milestone 4 — Settings & Polish (Week 7-8)
-
-- [ ] Settings page (paths, equipment overrides)
-- [ ] Dark mode
-- [ ] ASTAP platesolving for unidentified objects
-- [ ] Documentation site / User guide
 
 ### Milestone 5 — Pipeline Integration (Week 9-10)
 
