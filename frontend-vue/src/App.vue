@@ -1,14 +1,25 @@
 <script setup lang="ts">
 import { RouterView, RouterLink } from 'vue-router'
-import { Telescope, Target, Camera, FolderOpen, ScanLine, Search, Settings as SettingsIcon, HelpCircle, Globe } from 'lucide-vue-next'
+import { Telescope, Target, Camera, FolderOpen, ScanLine, Search, Settings as SettingsIcon, HelpCircle, Globe, Sun, Moon } from 'lucide-vue-next'
 import { useScanStore } from '@/stores/scan'
+import { useThemeStore } from '@/stores/theme'
 
 const scanStore = useScanStore()
+const themeStore = useThemeStore()
+
+// Initialize theme on mount
+themeStore.init()
 
 // Start polling on mount
 scanStore.fetchStatus()
 if (scanStore.state.running) {
   scanStore.startPolling()
+}
+
+function toggleTheme() {
+  if (themeStore.theme === 'dark') themeStore.setTheme('light')
+  else if (themeStore.theme === 'light') themeStore.setTheme('dark')
+  else themeStore.setTheme('dark')
 }
 </script>
 
@@ -55,11 +66,14 @@ if (scanStore.state.running) {
           <HelpCircle :size="18" />
           Hilfe
         </RouterLink>
-        <RouterLink to="/scan" class="nav-item">
-          <ScanLine :size="18" />
-          Scan
-        </RouterLink>
       </nav>
+      <div style="padding: 8px; border-top: 1px solid var(--border);">
+        <button class="nav-item" @click="toggleTheme" style="width: 100%; border: none; background: none; cursor: pointer;">
+          <Sun v-if="!themeStore.isDark" :size="18" />
+          <Moon v-else :size="18" />
+          {{ themeStore.isDark ? 'Dark Mode' : 'Light Mode' }}
+        </button>
+      </div>
     </aside>
 
     <div class="main-content">

@@ -68,6 +68,12 @@ export interface FilterStat {
   total_exposure_h: number
 }
 
+export interface SearchResult {
+  targets: Array<{ id: number; name: string; type: string | null }>
+  sessions: Array<{ id: number; group_key: string; date_obs: string | null; frame_count: number }>
+  frames: Array<{ id: number; object_name: string; filename: string; frame_type: string }>
+}
+
 export interface DashboardData {
   total_exposure_h: number
   total_frames: number

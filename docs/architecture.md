@@ -138,11 +138,66 @@ Key headers live in the **first extension** (HDU[1]) when the file is gzip-compr
 
 ```
 src/stellashelf/
-├── scanner.py      # FITS header extraction, session grouping
-├── db.py           # SQLAlchemy models (Target, Session, Frame, Camera, Telescope)
+├── scanner.py      # FITS header extraction, session grouping, thumbnail generation, platesolving
+├── db.py           # SQLAlchemy models (Target, Session, Frame, Camera, Telescope, CalibrationFile, Setting)
 ├── importer.py     # Centralized import pipeline (CLI & API)
 ├── cli.py          # Click CLI commands
-└── api.py          # FastAPI REST API + Vue 3 SPA serving
+└── api.py          # FastAPI REST API (20+ endpoints) + Vue 3 SPA serving
+
+frontend-vue/
+└── src/
+    ├── views/      # 12 Vue views: Dashboard, Targets, TargetDetail, Sessions, SessionDetail,
+    │               #   Equipment, Search, Scan, Settings, Platesolve, Help
+    ├── stores/     # 3 Pinia stores: api (HTTP client), scan (scan progress), theme (dark/light)
+    ├── components/ # Reusable: StatCard, Pagination
+    └── router/     # Vue Router with 12 routes
 ```
 
 The `ImporterService` in `importer.py` centralizes all import logic, eliminating duplication between CLI and API. Both interfaces delegate to this service, ensuring consistent behavior and easier maintenance.
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/dashboard` | GET | Aggregated dashboard data |
+| `/api/v1/search?q=...` | GET | Full-text search via FTS5 |
+| `/api/v1/targets` | GET | List targets (paginated, filterable by type/constellation) |
+| `/api/v1/targets/types` | GET | Distinct object types and constellations for filter dropdowns |
+| `/api/v1/targets/{id}` | GET | Target details |
+| `/api/v1/targets/{id}/sessions` | GET | Sessions for a target |
+| `/api/v1/targets/{id}/thumbnails` | GET | Recent frame thumbnails |
+| `/api/v1/sessions` | GET | List sessions (paginated, filterable) |
+| `/api/v1/sessions/{id}` | GET | Session details |
+| `/api/v1/sessions/{id}/stats` | GET | Per-filter and per-type aggregates |
+| `/api/v1/frames` | GET | List frames (paginated, filterable, `has_coordinates`) |
+| `/api/v1/frames/{id}/thumbnail` | GET | JPEG thumbnail |
+| `/api/v1/cameras` | GET | Cameras with usage stats |
+| `/api/v1/telescopes` | GET | Telescopes with usage stats |
+| `/api/v1/filters` | GET | Filter usage statistics |
+| `/api/v1/stats` | GET | Database statistics |
+| `/api/v1/scan` | POST | Start background scan |
+| `/api/v1/scan/status` | GET | Scan progress |
+| `/api/v1/platesolve` | POST | Run ASTAP platesolving |
+| `/api/v1/settings` | GET/POST | Application configuration |
+
+### Frontend Routes
+
+| Route | View | Description |
+|-------|------|-------------|
+| `/` | Dashboard | Stats, top targets, recent sessions, ECharts bar chart |
+| `/targets` | Targets | Filterable/sortable target list with badges |
+| `/targets/:id` | TargetDetail | Target info, thumbnails, session list |
+| `/sessions` | Sessions | Filterable/sortable session list |
+| `/sessions/:id` | SessionDetail | Frame list with pagination, filtering, aggregates |
+| `/equipment` | Equipment | Tabs: cameras, telescopes, filters — sortable |
+| `/search` | Search | FTS5 full-text search with tabbed results |
+| `/scan` | Scan | Directory scanner with live progress |
+| `/settings` | Settings | Config tabs: general (paths/theme/ASTAP), equipment overrides |
+| `/platesolve` | Platesolve | ASTAP platesolving runner |
+| `/help` | Help | Documentation and keyboard shortcuts |
+
+### Frontend State Management
+
+- **`api` store**: Centralized HTTP client with loading/error state
+- **`scan` store**: Real-time scan progress polling (500ms interval)
+- **`theme` store**: Dark/Light/System theme with localStorage persistence

@@ -58,14 +58,19 @@ stellashelf scan /path/to/files --dry-run    # Preview without importing
 
 ```
 src/stellashelf/
-├── scanner.py      # FITS header extraction, session grouping
-├── db.py           # SQLAlchemy models (Target, Session, Frame, Camera, Telescope)
+├── scanner.py      # FITS header extraction, session grouping, thumbnail generation, platesolving
+├── db.py           # SQLAlchemy models (Target, Session, Frame, Camera, Telescope, Setting)
 ├── importer.py     # Centralized import pipeline (CLI & API)
 ├── cli.py          # Click CLI commands
-└── api.py          # FastAPI REST API + Vue 3 SPA serving
+├── api.py          # FastAPI REST API + Vue 3 SPA serving (20+ endpoints)
+└── config.py       # Centralized configuration (paths, defaults)
 
 frontend-vue/
-└── src/            # Vue 3 + TypeScript + Vite + PrimeVue frontend
+└── src/
+    ├── views/      # 12 Vue views (Dashboard, Targets, Sessions, Equipment, Search, Settings, Scan, Platesolve, Help)
+    ├── stores/     # Pinia stores (api, scan, theme)
+    ├── components/ # Reusable components (StatCard, Pagination)
+    └── router/     # Vue Router with 12 routes
 ```
 
 ### Database Schema
@@ -75,20 +80,43 @@ frontend-vue/
 - **Frame**: Individual FITS file with full header metadata
 - **Camera/Telescope**: Equipment catalog
 - **CalibrationFile**: Master BIAS/DARK/FLAT files
+- **Setting**: Key/value application configuration
+
+## Features
+
+- **Full-Text Search**: FTS5-powered search across targets, sessions, and frames
+- **Object Type Badges**: Color-coded labels for Galaxy, Nebula, Star, Cluster, etc.
+- **Equipment Catalog**: Tab-based view for cameras, telescopes, and filters with sorting
+- **Session Aggregates**: Frame type counts and exposure per filter on session detail pages
+- **Thumbnail Generation**: Auto-generated JPEG previews from FITS data
+- **ASTAP Platesolving**: CLI integration to determine missing RA/Dec coordinates
+- **Theme Support**: Dark/Light/System themes persisted to localStorage
+- **Settings Page**: Configure scan paths, equipment overrides, and ASTAP binary
 
 ## API Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/v1/dashboard` | GET | Aggregated dashboard data |
-| `/api/v1/targets` | GET | List targets (paginated, searchable) |
-| `/api/v1/sessions` | GET | List sessions (paginated, filterable) |
-| `/api/v1/frames` | GET | List frames (paginated, filterable) |
+| `/api/v1/search?q=...` | GET | Full-text search via FTS5 |
+| `/api/v1/targets` | GET | List targets (paginated, searchable, filterable by type/constellation) |
+| `/api/v1/targets/types` | GET | Distinct object types and constellations for filter dropdowns |
+| `/api/v1/targets/{id}` | GET | Target details with session count and exposure totals |
+| `/api/v1/targets/{id}/sessions` | GET | Sessions for a target (paginated) |
+| `/api/v1/targets/{id}/thumbnails` | GET | Recent frame thumbnails for a target |
+| `/api/v1/sessions` | GET | List sessions (paginated, filterable by status/dates) |
+| `/api/v1/sessions/{id}` | GET | Session details |
+| `/api/v1/sessions/{id}/stats` | GET | Aggregated stats (frames per type, exposure per filter) |
+| `/api/v1/frames` | GET | List frames (paginated, filterable, optional `has_coordinates`) |
+| `/api/v1/frames/{id}/thumbnail` | GET | JPEG thumbnail for a specific frame |
 | `/api/v1/cameras` | GET | Camera catalog with usage stats |
 | `/api/v1/telescopes` | GET | Telescope catalog with usage stats |
+| `/api/v1/filters` | GET | Filter usage statistics |
+| `/api/v1/stats` | GET | Database statistics |
 | `/api/v1/scan` | POST | Start background FITS scan |
 | `/api/v1/scan/status` | GET | Get scan progress |
-| `/api/v1/stats` | GET | Database statistics |
+| `/api/v1/platesolve` | POST | Run ASTAP platesolving on unplated frames |
+| `/api/v1/settings` | GET/POST | Application settings (key/value) |
 
 ## Supported FITS Formats
 

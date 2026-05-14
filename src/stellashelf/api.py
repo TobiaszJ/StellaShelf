@@ -665,6 +665,7 @@ def list_frames(
     filter_name: Optional[str] = Query(None),
     frame_type: Optional[str] = Query(None),
     camera: Optional[str] = Query(None),
+    has_coordinates: Optional[bool] = Query(None, description="Filter by presence of RA/Dec coordinates"),
     sort_by: str = Query("date_obs"),
     sort_order: str = Query("asc"),
     page: int = Query(1, ge=1),
@@ -683,6 +684,10 @@ def list_frames(
             q = q.filter(Frame.frame_type == frame_type)
         if camera:
             q = q.filter(Frame.instrume.ilike(f"%{camera}%"))
+        if has_coordinates is True:
+            q = q.filter(Frame.ra_deg != None, Frame.dec_deg != None)
+        elif has_coordinates is False:
+            q = q.filter(Frame.ra_deg == None, Frame.dec_deg == None)
 
         total = q.count()
         pages = (total + page_size - 1) // page_size
@@ -906,20 +911,49 @@ def update_settings(settings: list[SettingSchema]):
 @app.post("/api/v1/platesolve")
 def run_platesolve():
     """Run ASTAP platesolving on all frames without RA/Dec coordinates."""
+    from stellashelf.scanner import platesolve_frame
+    from stellashelf.db import Setting
+    
     engine, SessionLocal = get_session_local()
+    
+    # Get ASTAP binary path from settings
+    astap_binary = "astap"
     with SessionLocal() as sess:
-        # Find frames without coordinates
+        setting = sess.query(Setting).filter(Setting.key == "astap_binary").first()
+        if setting and setting.value:
+            astap_binary = setting.value
+    
+    solved = 0
+    failed = 0
+    
+    with SessionLocal() as sess:
         unplated = (
-            sess.query(Frame.id, Frame.filepath)
+            sess.query(Frame)
             .filter(Frame.ra_deg == None, Frame.dec_deg == None)
-            .count()
+            .limit(50)
+            .all()
         )
         
-        return {
-            "status": "not_implemented",
-            "frames_without_coordinates": unplated,
-            "message": "ASTAP integration is planned. Configure the ASTAP binary path in Settings.",
-        }
+        for frame in unplated:
+            fp = Path(frame.filepath)
+            if not fp.exists():
+                continue
+            result = platesolve_frame(fp, astap_binary)
+            if result:
+                frame.ra_deg = result['ra_deg']
+                frame.dec_deg = result['dec_deg']
+                solved += 1
+            else:
+                failed += 1
+        
+        sess.commit()
+    
+    return {
+        "status": "ok",
+        "solved": solved,
+        "failed": failed,
+        "remaining": len(unplated) - solved - failed,
+    }
 
 
 

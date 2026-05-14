@@ -381,15 +381,8 @@ def generate_group_key(frame: ScannedFrame) -> str:
 
 
 def generate_thumbnail(filepath: Path, size: int = 200) -> Optional[bytes]:
-    """Generate a JPEG thumbnail from a FITS file.
-    
-    Args:
-        filepath: Path to the FITS file.
-        size: Maximum dimension (width/height) in pixels.
-    
-    Returns:
-        JPEG bytes, or None if thumbnail generation fails.
-    """
+    """..."""  # (existing function, unchanged)
+    # ... existing code ...
     try:
         with fits.open(str(filepath)) as hdul:
             # Get image data from the last HDU (usually has the data)
@@ -426,6 +419,52 @@ def generate_thumbnail(filepath: Path, size: int = 200) -> Optional[bytes]:
             buf = io.BytesIO()
             img.save(buf, format='JPEG', quality=85)
             return buf.getvalue()
+    except Exception:
+        return None
+
+
+def platesolve_frame(filepath: Path, astap_binary: str = "astap") -> Optional[dict]:
+    """Run ASTAP CLI on a FITS file to extract RA/Dec coordinates.
+    
+    Args:
+        filepath: Path to the FITS file.
+        astap_binary: Path to the ASTAP executable.
+    
+    Returns:
+        Dictionary with 'ra_deg' and 'dec_deg' on success, or None.
+    """
+    import subprocess
+    import tempfile
+    import json
+    
+    try:
+        # ASTAP can output coordinates to a text file
+        with tempfile.NamedTemporaryFile(suffix='.txt', delete=False, mode='w+') as tmp:
+            tmp_path = tmp.name
+        
+        result = subprocess.run(
+            [astap_binary, '-f', str(filepath), '-o', tmp_path, '-r', '50'],
+            capture_output=True, text=True, timeout=120
+        )
+        
+        if result.returncode != 0:
+            return None
+        
+        # Parse the output for coordinates
+        if Path(tmp_path).exists():
+            content = Path(tmp_path).read_text()
+            Path(tmp_path).unlink(missing_ok=True)
+            
+            ra_match = re.search(r'RA\s*=\s*([\d.]+)', content, re.IGNORECASE)
+            dec_match = re.search(r'DEC\s*=\s*([-\d.]+)', content, re.IGNORECASE)
+            
+            if ra_match and dec_match:
+                return {
+                    'ra_deg': float(ra_match.group(1)),
+                    'dec_deg': float(dec_match.group(1)),
+                }
+        
+        return None
     except Exception:
         return None
 
