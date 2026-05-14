@@ -1,62 +1,131 @@
 # StellaShelf
 
-**Astrophotography Digital Asset Manager & Processing Hub**
+**Astrophotography Digital Asset Management & Processing Hub**
 
-StellaShelf is a web-based tool for organizing, cataloging, and processing deep-sky astrophotography data. It scans FITS/XISF files, extracts metadata from headers, auto-groups sessions by object/date/equipment, and generates Siril processing pipelines.
+Open-source tool for cataloging, organizing, and managing deep-sky astrophotography image collections. Scans FITS/XISF headers, groups frames into observation sessions, and provides a web interface for browsing your astro archive.
+
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://opensource.org/licenses/AGPL-3.0)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![CI](https://github.com/TobiaszJ/StellaShelf/actions/workflows/ci.yml/badge.svg)](https://github.com/TobiaszJ/StellaShelf/actions)
 
 ## Features
 
-- 🔭 **Auto-discovery** — Recursively scans your astro data directory, reads FITS/XISF headers
-- 📋 **Smart grouping** — Automatically groups frames into sessions by object, date, camera, telescope, and filter
-- 🔍 **Full-text search** — Find any object, session, or frame instantly
-- 📊 **Dashboard** — Total exposure time, session counts, equipment overview
-- 🖥️ **Processing pipelines** — Generate Siril CLI scripts from sessions with one click
-- 🎛️ **Equipment catalog** — Auto-detected cameras, telescopes, and filters from your data
-
-## Architecture
-
-```
-Browser (Vue 3 + Vite)
-    ↕ REST API + WebSocket
-FastAPI Backend (Python)
-    ↕
-SQLite + FTS5
-    ↕
-FITS/XISF Scanner (astropy) + ASTAP (platesolver)
-```
-
-## Data Structure Support
-
-StellaShelf understands the common astrophotography folder layout:
-
-```
-Camera/
-  ├── master calibration files (darks, bias, flats)
-  └── Telescope/
-      └── Object/
-          └── Date/
-              └── Light frames
-```
-
-It also reads metadata from Sequence Generator Pro, N.I.N.A., Ekos/INDI, and other capture software headers.
+- **FITS Header Scanner**: Recursively scans directories for FITS files, extracts metadata from headers (OBJECT, EXPOSURE, FILTER, coordinates, etc.)
+- **Automatic Session Grouping**: Groups frames by target + date + camera + telescope + filter
+- **Multi-Software Support**: Handles SGP-compressed FITS (HDU[1] headers), MaximDL, QHY, and other capture software
+- **SQLite + FTS5**: Serverless database with full-text search, no external dependencies
+- **Web Dashboard**: Browse targets, sessions, and equipment with pagination and filtering
+- **REST API**: FastAPI backend with pagination, aggregation, and scan management
+- **Calibration File Detection**: Automatically identifies and separates BIAS, DARK, FLAT from light frames
+- **Coordinate Parsing**: Converts HMS/DMS strings to decimal degrees for old FITS files
 
 ## Quick Start
 
 ```bash
-# Install dependencies
-pip install -e ".[dev]"
+# Clone and install
+git clone https://github.com/TobiaszJ/StellaShelf.git
+cd StellaShelf
+python -m venv .venv && source .venv/bin/activate
+pip install -e .
 
-# Run the scanner
-stellashelf scan /path/to/astro/data
+# Scan your FITS collection
+stellashelf scan /path/to/astro/files
 
-# Start the web UI
-stellashelf serve
+# View statistics
+stellashelf stats
+
+# Start web server
+stellashelf serve --host 0.0.0.0 --port 8321
+# Open http://localhost:8321 in your browser
 ```
+
+## CLI Commands
+
+| Command | Description |
+|---------|-------------|
+| `stellashelf scan <path>` | Scan FITS files and import metadata |
+| `stellashelf stats` | Show database statistics |
+| `stellashelf serve` | Start web API server |
+
+### Scan Options
+
+```bash
+stellashelf scan /mnt/data/Astro --recursive --db ~/.stellashelf/stellashelf.db
+stellashelf scan /path/to/files --dry-run    # Preview without importing
+```
+
+## Architecture
+
+```
+src/stellashelf/
+├── scanner.py      # FITS header extraction, session grouping
+├── db.py           # SQLAlchemy models (Target, Session, Frame, Camera, Telescope)
+├── cli.py          # Click CLI commands
+└── api.py          # FastAPI REST API + web frontend serving
+
+frontend/
+└── index.html      # Single-page web dashboard (no build step)
+```
+
+### Database Schema
+
+- **Target**: Astronomical object (M42, NGC7000, etc.)
+- **Session**: One target + one night + one equipment setup
+- **Frame**: Individual FITS file with full header metadata
+- **Camera/Telescope**: Equipment catalog
+- **CalibrationFile**: Master BIAS/DARK/FLAT files
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/dashboard` | GET | Aggregated dashboard data |
+| `/api/v1/targets` | GET | List targets (paginated, searchable) |
+| `/api/v1/sessions` | GET | List sessions (paginated, filterable) |
+| `/api/v1/frames` | GET | List frames (paginated, filterable) |
+| `/api/v1/cameras` | GET | Camera catalog with usage stats |
+| `/api/v1/telescopes` | GET | Telescope catalog with usage stats |
+| `/api/v1/scan` | POST | Start background FITS scan |
+| `/api/v1/scan/status` | GET | Get scan progress |
+| `/api/v1/stats` | GET | Database statistics |
+
+## Supported FITS Formats
+
+- Standard FITS (.fit, .fits)
+- Gzip-compressed FITS (.fit.gz, .fits.gz) — SGP format
+- Extension headers: Reads HDU[1] for compressed files
+- Coordinate formats: Numeric RA/DEC + HMS/DMS strings
+
+## Known Issues / Limitations
+
+- XISF files are detected but not yet parsed (skipped with warning)
+- Session grouping by path may split multi-night observations of the same target
+- HMS/DMS parsing covers common formats but not all edge cases
 
 ## Development
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, branch conventions, and commit guidelines.
+```bash
+# Run tests
+pytest tests/ -v -k "not integration"
+
+# Run integration tests (requires astro data directory)
+pytest tests/ -v -k "integration"
+
+# Lint + type check
+ruff check src/
+mypy src/
+```
 
 ## License
 
-AGPL-3.0 — See [LICENSE](LICENSE) for details. Commercial licensing available on request.
+AGPL-3.0 — Network copyleft. If you run a modified version as a service, you must make the source available.
+
+## Roadmap
+
+- [ ] ASTAP platesolving for frames missing coordinates
+- [ ] Siril `.sss` script generator for processing pipelines
+- [ ] Vue3/PrimeVue frontend reactivity
+- [ ] XISF file parsing
+- [ ] Quality metrics (FWHM, eccentricity) from Siril/Astap
+- [ ] Processing pipeline integration
+- [ ] Docker Compose deployment

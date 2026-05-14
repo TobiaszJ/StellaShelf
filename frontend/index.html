@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>StellaShelf</title>
+    <title>StellaShelf — Astrofoto DAM</title>
     <style>
         :root {
             --bg: #0d1117;
@@ -14,19 +14,16 @@
             --accent: #58a6ff;
             --accent2: #3fb950;
             --accent3: #f0883e;
-            --badge-raw: #d29922;
-            --badge-calibrated: #3fb950;
-            --badge-stacked: #58a6ff;
-            --badge-processed: #a371f7;
+            --danger: #f85149;
         }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background: var(--bg);
             color: var(--text);
-            min-height: 100vh;
+            line-height: 1.5;
         }
-        .navbar {
+        nav {
             background: var(--surface);
             border-bottom: 1px solid var(--border);
             padding: 12px 24px;
@@ -34,129 +31,127 @@
             align-items: center;
             gap: 24px;
         }
-        .navbar h1 { font-size: 20px; font-weight: 600; }
-        .navbar h1 span { color: var(--accent); }
-        .nav-links { display: flex; gap: 16px; }
-        .nav-links a {
+        nav h1 { font-size: 18px; font-weight: 700; color: var(--accent); }
+        nav a {
             color: var(--text-muted);
-            text-decoration: none;
+            cursor: pointer;
             font-size: 14px;
             padding: 6px 12px;
             border-radius: 6px;
-            cursor: pointer;
             transition: all 0.15s;
         }
-        .nav-links a:hover, .nav-links a.active {
-            color: var(--text);
-            background: rgba(88, 166, 255, 0.1);
+        nav a:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+        nav a.active { color: var(--accent); background: rgba(88,166,255,0.1); }
+        main { max-width: 1200px; margin: 0 auto; padding: 24px; }
+        .page { display: none; }
+        .page.active { display: block; }
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 16px;
         }
-        .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+        .card h2 { font-size: 16px; font-weight: 600; margin-bottom: 12px; color: var(--text); }
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 16px;
-            margin-bottom: 32px;
+            gap: 12px;
+            margin-bottom: 24px;
         }
         .stat-card {
             background: var(--surface);
             border: 1px solid var(--border);
             border-radius: 8px;
-            padding: 20px;
+            padding: 16px;
             text-align: center;
         }
-        .stat-card .value {
-            font-size: 36px;
-            font-weight: 700;
-            color: var(--accent);
-        }
-        .stat-card .label {
+        .stat-card .value { font-size: 28px; font-weight: 700; color: var(--accent); }
+        .stat-card .label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; margin-top: 4px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+        th { color: var(--text-muted); font-weight: 500; font-size: 12px; text-transform: uppercase; }
+        tr:hover { background: rgba(255,255,255,0.02); }
+        .btn {
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
             font-size: 13px;
-            color: var(--text-muted);
-            margin-top: 4px;
+            font-weight: 500;
         }
-        .section { margin-bottom: 32px; }
-        .section h2 {
-            font-size: 18px;
-            font-weight: 600;
-            margin-bottom: 16px;
-            padding-bottom: 8px;
-            border-bottom: 1px solid var(--border);
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        th, td {
-            padding: 10px 14px;
-            text-align: left;
-            border-bottom: 1px solid var(--border);
-        }
-        th {
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        td { font-size: 14px; }
-        tr:hover td { background: rgba(88, 166, 255, 0.05); }
+        .btn:hover { opacity: 0.9; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-sm { padding: 4px 10px; font-size: 12px; }
+        .btn-danger { background: var(--danger); }
+        .btn-success { background: var(--accent2); }
         .badge {
             display: inline-block;
             padding: 2px 8px;
             border-radius: 12px;
             font-size: 11px;
             font-weight: 600;
-            text-transform: uppercase;
         }
-        .badge-raw { background: rgba(210, 153, 34, 0.15); color: var(--badge-raw); }
-        .link {
-            color: var(--accent);
-            text-decoration: none;
-            cursor: pointer;
-        }
-        .link:hover { text-decoration: underline; }
-        .btn {
-            display: inline-block;
-            padding: 8px 16px;
-            background: var(--accent);
-            color: #fff;
-            border: none;
-            border-radius: 6px;
-            font-size: 14px;
-            cursor: pointer;
-            text-decoration: none;
-        }
-        .btn:hover { opacity: 0.9; }
-        .btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        .btn-danger {
-            background: #da3633;
-        }
-        .btn-success {
-            background: var(--accent2);
-        }
-        .back-link { margin-bottom: 16px; }
-        .session-detail { margin-top: 24px; }
-        .session-meta {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 16px;
-            margin-bottom: 24px;
-        }
-        .meta-item {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 12px;
-        }
-        .meta-item .label { font-size: 12px; color: var(--text-muted); }
-        .meta-item .value { font-size: 16px; font-weight: 500; margin-top: 4px; }
+        .badge-light { background: rgba(88,166,255,0.15); color: var(--accent); }
+        .badge-dark { background: rgba(248,81,73,0.15); color: var(--danger); }
+        .badge-flat { background: rgba(210,153,34,0.15); color: #d29922; }
+        .badge-bias { background: rgba(139,148,158,0.15); color: var(--text-muted); }
         .loading { text-align: center; padding: 40px; color: var(--text-muted); }
         .empty { text-align: center; padding: 40px; color: var(--text-muted); }
 
-        /* Scan tab styles */
+        /* Pagination */
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            margin-top: 16px;
+        }
+        .pagination button {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
+        .pagination button.active { background: var(--accent); border-color: var(--accent); }
+        .pagination .info { font-size: 12px; color: var(--text-muted); }
+
+        /* Filters */
+        .filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 16px;
+            align-items: flex-end;
+        }
+        .filter-group label {
+            display: block;
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        .filter-group input, .filter-group select {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            min-width: 140px;
+        }
+        .filter-group input:focus, .filter-group select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        /* Scan tab */
         .scan-controls {
             display: flex;
             flex-wrap: wrap;
@@ -164,14 +159,7 @@
             align-items: flex-end;
             margin-bottom: 24px;
         }
-        .scan-controls label {
-            font-size: 13px;
-            color: var(--text-muted);
-            display: block;
-            margin-bottom: 4px;
-        }
-        .scan-controls select,
-        .scan-controls input[type="text"] {
+        .scan-controls select, .scan-controls input[type="text"] {
             background: var(--bg);
             color: var(--text);
             border: 1px solid var(--border);
@@ -179,11 +167,6 @@
             padding: 8px 12px;
             font-size: 14px;
             min-width: 200px;
-        }
-        .scan-controls select:focus,
-        .scan-controls input[type="text"]:focus {
-            outline: none;
-            border-color: var(--accent);
         }
         .progress-container {
             background: var(--surface);
@@ -193,55 +176,29 @@
             margin-bottom: 24px;
             display: none;
         }
-        .progress-container.visible {
-            display: block;
-        }
-        .progress-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 12px;
-        }
-        .progress-header .status-text {
-            font-size: 14px;
-            font-weight: 500;
-        }
-        .progress-header .status-text.scanning { color: var(--accent); }
-        .progress-header .status-text.importing { color: var(--accent3); }
-        .progress-header .status-text.done { color: var(--accent2); }
-        .progress-header .status-text.error { color: #f85149; }
+        .progress-container.visible { display: block; }
         .progress-bar-bg {
             width: 100%;
             height: 24px;
             background: var(--bg);
             border-radius: 12px;
             overflow: hidden;
-            margin-bottom: 16px;
+            margin: 12px 0;
         }
         .progress-bar-fill {
             height: 100%;
             background: linear-gradient(90deg, var(--accent), var(--accent2));
             border-radius: 12px;
             transition: width 0.3s ease;
-            min-width: 0;
         }
         .progress-stats {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
             gap: 12px;
-        }
-        .progress-stat {
             text-align: center;
         }
-        .progress-stat .num {
-            font-size: 20px;
-            font-weight: 700;
-        }
-        .progress-stat .lbl {
-            font-size: 11px;
-            color: var(--text-muted);
-            text-transform: uppercase;
-        }
+        .progress-stat .num { font-size: 18px; font-weight: 700; }
+        .progress-stat .lbl { font-size: 11px; color: var(--text-muted); text-transform: uppercase; }
         .current-file {
             margin-top: 12px;
             font-size: 12px;
@@ -251,538 +208,364 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
-        .scan-info {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 16px;
-            font-size: 13px;
-            color: var(--text-muted);
-            line-height: 1.6;
-        }
-        .scan-info code {
+
+        /* Top targets list */
+        .top-targets { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+        .top-target-item {
             background: var(--bg);
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 12px;
+            cursor: pointer;
+            transition: border-color 0.15s;
         }
+        .top-target-item:hover { border-color: var(--accent); }
+        .top-target-item .name { font-weight: 600; font-size: 14px; }
+        .top-target-item .meta { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
+        /* Link-like clickable rows */
+        .clickable { cursor: pointer; }
+        .clickable:hover td { color: var(--accent); }
     </style>
 </head>
 <body>
-    <nav class="navbar">
-        <h1>🌌 <span>Stella</span>Shelf</h1>
-        <div class="nav-links">
-            <a onclick="showPage('dashboard')" id="nav-dashboard" class="active">Dashboard</a>
-            <a onclick="showPage('targets')" id="nav-targets">Targets</a>
-            <a onclick="showPage('sessions')" id="nav-sessions">Sessions</a>
-            <a onclick="showPage('equipment')" id="nav-equipment">Equipment</a>
-            <a onclick="showPage('scan')" id="nav-scan">Scan</a>
+<nav>
+    <h1>StellaShelf</h1>
+    <a onclick="showPage('dashboard')" id="nav-dashboard" class="active">Dashboard</a>
+    <a onclick="showPage('targets')" id="nav-targets">Targets</a>
+    <a onclick="showPage('sessions')" id="nav-sessions">Sessions</a>
+    <a onclick="showPage('equipment')" id="nav-equipment">Equipment</a>
+    <a onclick="showPage('scan')" id="nav-scan">Scan</a>
+</nav>
+
+<main>
+    <!-- Dashboard -->
+    <div id="page-dashboard" class="page active">
+        <div class="stats-grid" id="dashboard-stats"></div>
+        <div class="card">
+            <h2>Top Targets (nach Belichtungszeit)</h2>
+            <div class="top-targets" id="top-targets"></div>
         </div>
-    </nav>
+        <div class="card">
+            <h2>Letzte Sessions</h2>
+            <table>
+                <thead><tr><th>Ziel</th><th>Datum</th><th>Belichtung</th><th>Frames</th><th></th></tr></thead>
+                <tbody id="recent-sessions"></tbody>
+            </table>
+        </div>
+    </div>
 
-    <div class="container" id="app"></div>
+    <!-- Targets -->
+    <div id="page-targets" class="page">
+        <div class="filters">
+            <div class="filter-group">
+                <label>Suche</label>
+                <input type="text" id="target-search" placeholder="Name..." oninput="loadTargets(1)">
+            </div>
+            <div class="filter-group">
+                <label>Sortierung</label>
+                <select id="target-sort" onchange="loadTargets(1)">
+                    <option value="name">Name</option>
+                    <option value="total_h">Belichtungszeit</option>
+                    <option value="session_count">Sessions</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Richtung</label>
+                <select id="target-order" onchange="loadTargets(1)">
+                    <option value="asc">Aufsteigend</option>
+                    <option value="desc" selected>Absteigend</option>
+                </select>
+            </div>
+        </div>
+        <table>
+            <thead><tr><th>Name</th><th>Sessions</th><th>Belichtung</th><th>Typ</th><th></th></tr></thead>
+            <tbody id="targets-body"></tbody>
+        </table>
+        <div class="pagination" id="targets-pagination"></div>
+    </div>
 
-    <script>
-        const API = '/api/v1';
-        let scanPollInterval = null;
+    <!-- Sessions -->
+    <div id="page-sessions" class="page">
+        <div class="filters">
+            <div class="filter-group">
+                <label>Status</label>
+                <select id="session-status" onchange="loadSessions(1)">
+                    <option value="">Alle</option>
+                    <option value="raw">Raw</option>
+                    <option value="calibrated">Kalibriert</option>
+                    <option value="stacked">Gestackt</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Sortierung</label>
+                <select id="session-sort" onchange="loadSessions(1)">
+                    <option value="date_obs">Datum</option>
+                    <option value="total_exposure_h">Belichtung</option>
+                    <option value="frame_count">Frames</option>
+                </select>
+            </div>
+        </div>
+        <table>
+            <thead><tr><th>Ziel</th><th>Datum</th><th>Kamera</th><th>Teleskop</th><th>Belichtung</th><th>Frames</th><th>Status</th><th></th></tr></thead>
+            <tbody id="sessions-body"></tbody>
+        </table>
+        <div class="pagination" id="sessions-pagination"></div>
+    </div>
 
-        // Navigation
-        function showPage(page, param) {
-            document.querySelectorAll('.nav-links a').forEach(a => a.classList.remove('active'));
-            const navEl = document.getElementById('nav-' + page);
-            if (navEl) navEl.classList.add('active');
+    <!-- Equipment -->
+    <div id="page-equipment" class="page">
+        <div class="card"><h2>Kameras</h2><table><thead><tr><th>Name</th><th>Pixel (um)</th><th>Frames</th><th>Belichtung</th></tr></thead><tbody id="cameras-body"></tbody></table></div>
+        <div class="card"><h2>Teleskope</h2><table><thead><tr><th>Name</th><th>Brennweite (mm)</th><th>Frames</th><th>Belichtung</th></tr></thead><tbody id="telescopes-body"></tbody></table></div>
+    </div>
 
-            // Stop scan polling when leaving scan page
-            if (page !== 'scan' && scanPollInterval) {
-                clearInterval(scanPollInterval);
-                scanPollInterval = null;
-            }
-
-            switch(page) {
-                case 'dashboard': renderDashboard(); break;
-                case 'targets': renderTargets(); break;
-                case 'sessions': renderSessions(); break;
-                case 'equipment': renderEquipment(); break;
-                case 'target': renderTargetDetail(param); break;
-                case 'session': renderSessionDetail(param); break;
-                case 'scan': renderScan(); break;
-            }
-        }
-
-        async function api(path) {
-            const res = await fetch(API + path);
-            if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
-            return res.json();
-        }
-
-        async function apiPost(path, body) {
-            const res = await fetch(API + path, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-            });
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({ detail: res.statusText }));
-                throw new Error(err.detail || res.statusText);
-            }
-            return res.json();
-        }
-
-        // --- Dashboard ---
-        async function renderDashboard() {
-            const app = document.getElementById('app');
-            app.innerHTML = '<div class="loading">Loading...</div>';
-
-            const [stats, targets] = await Promise.all([
-                api('/stats'),
-                api('/targets')
-            ]);
-
-            app.innerHTML = `
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="value">${stats.targets}</div>
-                        <div class="label">Targets</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="value">${stats.sessions}</div>
-                        <div class="label">Sessions</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="value">${stats.frames}</div>
-                        <div class="label">Frames</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="value">${stats.total_exposure_h}h</div>
-                        <div class="label">Total Exposure</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="value">${stats.calibration_files}</div>
-                        <div class="label">Calibration Files</div>
-                    </div>
+    <!-- Scan -->
+    <div id="page-scan" class="page">
+        <div class="card">
+            <h2>Scan starten</h2>
+            <div class="scan-controls">
+                <div class="filter-group">
+                    <label>Pfad</label>
+                    <select id="scan-path-select" onchange="document.getElementById('scan-path-text').value=this.value">
+                        <option value="/mnt/data/Astro/astro">/mnt/data/Astro/astro (Alle)</option>
+                        <option value="/mnt/data/Astro/astro/ASI533MCPro">ASI533MCPro</option>
+                        <option value="/mnt/data/Astro/astro/ASI2600MMPro">ASI2600MMPro</option>
+                        <option value="/mnt/data/Astro/astro/ASI2600MMPro2">ASI2600MMPro2</option>
+                        <option value="/mnt/data/Astro/astro/ASI294MMPro">ASI294MMPro</option>
+                        <option value="/mnt/data/Astro/astro/ASI183MMPro">ASI183MMPro</option>
+                        <option value="/mnt/data/Astro/astro/Allsky">Allsky</option>
+                        <option value="/mnt/data/Astro/astro/Sort">Sort</option>
+                    </select>
                 </div>
-                <div class="section">
-                    <h2>Recent Targets</h2>
-                    ${targets.length === 0 ? '<div class="empty">No targets found. Run a scan to import your data.</div>' : `
-                    <table>
-                        <thead><tr><th>Target</th><th>Sessions</th><th>Type</th></tr></thead>
-                        <tbody>
-                            ${targets.map(t => `
-                                <tr>
-                                    <td><span class="link" onclick="showPage('target', ${t.id})">${t.name}</span></td>
-                                    <td>${t.sessions ? t.sessions.length : '?'}</td>
-                                    <td>${t.object_type || '-'}</td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>`}
+                <div class="filter-group">
+                    <label>Oder benutzerdefiniert</label>
+                    <input type="text" id="scan-path-text" value="/mnt/data/Astro/astro" placeholder="/mnt/data/Astro/...">
                 </div>
-            `;
+                <button class="btn btn-success" id="scan-btn" onclick="startScan()">Scan starten</button>
+            </div>
+        </div>
+        <div class="progress-container" id="progress-container">
+            <div class="progress-header">
+                <span class="status-text" id="scan-status-text">Initialisiere...</span>
+            </div>
+            <div class="progress-bar-bg"><div class="progress-bar-fill" id="progress-fill" style="width:0%"></div></div>
+            <div class="progress-stats">
+                <div class="progress-stat"><div class="num" id="stat-total">0</div><div class="lbl">Total</div></div>
+                <div class="progress-stat"><div class="num" id="stat-processed">0</div><div class="lbl">Gescannt</div></div>
+                <div class="progress-stat"><div class="num" id="stat-imported">0</div><div class="lbl">Importiert</div></div>
+                <div class="progress-stat"><div class="num" id="stat-skipped">0</div><div class="lbl">Uebersprungen</div></div>
+            </div>
+            <div class="current-file" id="current-file"></div>
+        </div>
+        <div class="card scan-info">
+            <h2>Info</h2>
+            <p>Der Scan liest FITS-Header aus und importiert Metadaten in die Datenbank. Bestehende Dateien werden uebersprungen.
+            Der Scan laeuft im Hintergrund — du kannst waehrenddessen weiterarbeiten.</p>
+        </div>
+    </div>
+</main>
+
+<script>
+const API = window.location.origin;
+let scanPollInterval = null;
+let currentPage = { targets: 1, sessions: 1 };
+const PAGE_SIZE = 50;
+
+// Page navigation
+function showPage(name) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
+    document.getElementById('page-' + name).classList.add('active');
+    document.getElementById('nav-' + name).classList.add('active');
+    if (name === 'dashboard') loadDashboard();
+    if (name === 'targets') loadTargets(1);
+    if (name === 'sessions') loadSessions(1);
+    if (name === 'equipment') loadEquipment();
+    if (name === 'scan') loadScanStatus();
+}
+
+// Dashboard
+async function loadDashboard() {
+    const res = await fetch(API + '/api/v1/dashboard');
+    const d = await res.json();
+    document.getElementById('dashboard-stats').innerHTML = `
+        <div class="stat-card"><div class="value">${d.total_targets}</div><div class="label">Targets</div></div>
+        <div class="stat-card"><div class="value">${d.total_sessions}</div><div class="label">Sessions</div></div>
+        <div class="stat-card"><div class="value">${d.total_frames.toLocaleString()}</div><div class="label">Frames</div></div>
+        <div class="stat-card"><div class="value">${d.total_exposure_h.toLocaleString()}h</div><div class="label">Belichtung</div></div>
+    `;
+    document.getElementById('top-targets').innerHTML = d.top_targets.map(t => `
+        <div class="top-target-item" onclick="showTargetSessions(${t.id})">
+            <div class="name">${t.name}</div>
+            <div class="meta">${t.total_exposure_h}h &middot; ${t.session_count} Sessions</div>
+        </div>
+    `).join('');
+    document.getElementById('recent-sessions').innerHTML = d.recent_sessions.map(s => `
+        <tr>
+            <td>${s.target_id}</td>
+            <td>${s.date_obs ? new Date(s.date_obs).toLocaleDateString('de-CH') : '-'}</td>
+            <td>${s.total_exposure_h}h</td>
+            <td>${s.frame_count}</td>
+            <td><button class="btn btn-sm" onclick="showPage('sessions')">Details</button></td>
+        </tr>
+    `).join('');
+}
+
+function showTargetSessions(targetId) {
+    showPage('sessions');
+    // Could add target_id filter here
+}
+
+// Targets
+async function loadTargets(page) {
+    currentPage.targets = page;
+    const search = document.getElementById('target-search').value;
+    const sort = document.getElementById('target-sort').value;
+    const order = document.getElementById('target-order').value;
+    let url = `${API}/api/v1/targets?page=${page}&page_size=${PAGE_SIZE}&sort_by=${sort}&sort_order=${order}`;
+    if (search) url += `&search=${encodeURIComponent(search)}`;
+    const res = await fetch(url);
+    const d = await res.json();
+    document.getElementById('targets-body').innerHTML = d.items.map(t => `
+        <tr class="clickable" onclick="showTargetDetail(${t.id})">
+            <td><strong>${t.name}</strong></td>
+            <td>${t.session_count}</td>
+            <td>${t.total_exposure_h}h</td>
+            <td>${t.object_type || '-'}</td>
+            <td><button class="btn btn-sm" onclick="event.stopPropagation(); showTargetDetail(${t.id})">Details</button></td>
+        </tr>
+    `).join('');
+    renderPagination('targets-pagination', d.total, d.page, d.pages, 'loadTargets');
+}
+
+function showTargetDetail(id) {
+    // For now, just filter sessions by this target
+    window.location.hash = `target-${id}`;
+    showPage('sessions');
+}
+
+// Sessions
+async function loadSessions(page) {
+    currentPage.sessions = page;
+    const status = document.getElementById('session-status').value;
+    const sort = document.getElementById('session-sort').value;
+    let url = `${API}/api/v1/sessions?page=${page}&page_size=${PAGE_SIZE}&sort_by=${sort}&sort_order=desc`;
+    if (status) url += `&status=${status}`;
+    const hash = window.location.hash;
+    if (hash.startsWith('#target-')) url += `&target_id=${hash.replace('#target-', '')}`;
+    const res = await fetch(url);
+    const d = await res.json();
+    document.getElementById('sessions-body').innerHTML = d.items.map(s => `
+        <tr>
+            <td><strong>${s.target_name}</strong></td>
+            <td>${s.date_obs ? new Date(s.date_obs).toLocaleDateString('de-CH') : '-'}</td>
+            <td>${s.camera_name || '-'}</td>
+            <td>${s.telescope_name || '-'}</td>
+            <td>${s.total_exposure_h}h</td>
+            <td>${s.frame_count}</td>
+            <td><span class="badge badge-${s.status === 'raw' ? 'light' : s.status}">${s.status}</span></td>
+            <td><button class="btn btn-sm" onclick="alert('Session ${s.id}: ${s.group_key}')">Info</button></td>
+        </tr>
+    `).join('');
+    renderPagination('sessions-pagination', d.total, d.page, d.pages, 'loadSessions');
+}
+
+// Equipment
+async function loadEquipment() {
+    const [camRes, telRes] = await Promise.all([
+        fetch(API + '/api/v1/cameras'),
+        fetch(API + '/api/v1/telescopes')
+    ]);
+    const cameras = await camRes.json();
+    const telescopes = await telRes.json();
+    document.getElementById('cameras-body').innerHTML = cameras.map(c => `
+        <tr><td>${c.name}</td><td>${c.pixel_size_um || '-'}</td><td>${c.frame_count}</td><td>${c.total_exposure_h}h</td></tr>
+    `).join('');
+    document.getElementById('telescopes-body').innerHTML = telescopes.map(t => `
+        <tr><td>${t.name}</td><td>${t.focal_length_mm || '-'}</td><td>${t.frame_count}</td><td>${t.total_exposure_h}h</td></tr>
+    `).join('');
+}
+
+// Pagination
+function renderPagination(containerId, total, page, pages, fnName) {
+    const c = document.getElementById(containerId);
+    if (pages <= 1) { c.innerHTML = ''; return; }
+    let html = `<span class="info">${total} Ergebnisse, Seite ${page} von ${pages}</span>`;
+    html += `<button ${page <= 1 ? 'disabled' : ''} onclick="${fnName}(${page - 1})">&laquo;</button>`;
+    html += `<button class="active">${page}</button>`;
+    html += `<button ${page >= pages ? 'disabled' : ''} onclick="${fnName}(${page + 1})">&raquo;</button>`;
+    c.innerHTML = html;
+}
+
+// Scan
+async function startScan() {
+    const path = document.getElementById('scan-path-text').value.trim();
+    if (!path) { alert('Pfad eingeben'); return; }
+    const btn = document.getElementById('scan-btn');
+    btn.disabled = true;
+    const res = await fetch(API + '/api/v1/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path, recursive: true }),
+    });
+    const d = await res.json();
+    if (res.status === 409) { alert('Ein Scan laeuft bereits'); btn.disabled = false; return; }
+    if (res.status !== 200) { alert('Fehler: ' + (d.detail || 'Unbekannt')); btn.disabled = false; return; }
+    document.getElementById('progress-container').classList.add('visible');
+    startPolling();
+}
+
+function startPolling() {
+    if (scanPollInterval) clearInterval(scanPollInterval);
+    scanPollInterval = setInterval(async () => {
+        const res = await fetch(API + '/api/v1/scan/status');
+        const s = await res.json();
+        const pct = s.total > 0 ? (s.processed / s.total * 100) : 0;
+        document.getElementById('progress-fill').style.width = pct + '%';
+        document.getElementById('stat-total').textContent = s.total.toLocaleString();
+        document.getElementById('stat-processed').textContent = s.processed.toLocaleString();
+        document.getElementById('stat-imported').textContent = s.imported.toLocaleString();
+        document.getElementById('stat-skipped').textContent = s.skipped.toLocaleString();
+        document.getElementById('current-file').textContent = s.current_file || '';
+        const statusEl = document.getElementById('scan-status-text');
+        if (s.phase === 'scanning') {
+            statusEl.textContent = 'Scanne FITS-Header...';
+            statusEl.className = 'status-text scanning';
+        } else if (s.phase === 'importing') {
+            statusEl.textContent = 'Importiere in Datenbank...';
+            statusEl.className = 'status-text importing';
+        } else if (s.phase === 'done') {
+            statusEl.textContent = `Fertig: ${s.imported} Frames importiert, ${s.skipped} uebersprungen`;
+            statusEl.className = 'status-text done';
+            document.getElementById('scan-btn').disabled = false;
+            clearInterval(scanPollInterval);
+            // Refresh dashboard stats
+            setTimeout(loadDashboard, 1000);
+        } else if (s.phase === 'error') {
+            statusEl.textContent = 'Fehler: ' + (s.error || 'Unbekannt');
+            statusEl.className = 'status-text error';
+            document.getElementById('scan-btn').disabled = false;
+            clearInterval(scanPollInterval);
         }
+    }, 500);
+}
 
-        // --- Targets ---
-        async function renderTargets() {
-            const app = document.getElementById('app');
-            app.innerHTML = '<div class="loading">Loading targets...</div>';
-            const targets = await api('/targets');
+async function loadScanStatus() {
+    const res = await fetch(API + '/api/v1/scan/status');
+    const s = await res.json();
+    if (s.running) {
+        document.getElementById('progress-container').classList.add('visible');
+        document.getElementById('scan-btn').disabled = true;
+        startPolling();
+    } else if (s.phase === 'done') {
+        document.getElementById('progress-container').classList.add('visible');
+        document.getElementById('scan-status-text').textContent = `Letzter Scan: ${s.imported} Frames importiert`;
+        document.getElementById('scan-status-text').className = 'status-text done';
+    }
+}
 
-            const targetsWithCounts = await Promise.all(targets.map(async t => {
-                const sessions = await api('/targets/' + t.id + '/sessions');
-                return { ...t, sessionCount: sessions.length };
-            }));
-
-            app.innerHTML = `
-                <div class="section">
-                    <h2>All Targets (${targets.length})</h2>
-                    <table>
-                        <thead><tr><th>Target</th><th>Sessions</th><th>Type</th><th>Constellation</th></tr></thead>
-                        <tbody>
-                            ${targetsWithCounts.map(t => `
-                                <tr>
-                                    <td><span class="link" onclick="showPage('target', ${t.id})">${t.name}</span></td>
-                                    <td>${t.sessionCount}</td>
-                                    <td>${t.object_type || '-'}</td>
-                                    <td>${t.constellation || '-'}</td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                </div>
-            `;
-        }
-
-        // --- Target Detail ---
-        async function renderTargetDetail(targetId) {
-            const app = document.getElementById('app');
-            app.innerHTML = '<div class="loading">Loading target...</div>';
-
-            const [target, sessions] = await Promise.all([
-                api('/targets/' + targetId),
-                api('/targets/' + targetId + '/sessions')
-            ]);
-
-            app.innerHTML = `
-                <div class="back-link">
-                    <span class="link" onclick="showPage('targets')">← Back to Targets</span>
-                </div>
-                <div class="section">
-                    <h2>${target.name}</h2>
-                    <p style="color: var(--text-muted); margin-bottom: 24px;">
-                        ${target.object_type || 'Unknown type'} ${target.constellation ? 'in ' + target.constellation : ''}
-                    </p>
-                </div>
-                <div class="section">
-                    <h2>Sessions (${sessions.length})</h2>
-                    <table>
-                        <thead><tr><th>Date</th><th>Status</th><th>Frames</th><th>Exposure</th><th></th></tr></thead>
-                        <tbody>
-                            ${sessions.map(s => `
-                                <tr>
-                                    <td>${s.date_obs.split('T')[0]}</td>
-                                    <td><span class="badge badge-${s.status}">${s.status}</span></td>
-                                    <td>${s.frame_count}</td>
-                                    <td>${s.total_exposure_h.toFixed(1)}h</td>
-                                    <td><span class="link" onclick="showPage('session', ${s.id})">Details →</span></td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                </div>
-            `;
-        }
-
-        // --- Sessions ---
-        async function renderSessions() {
-            const app = document.getElementById('app');
-            app.innerHTML = '<div class="loading">Loading sessions...</div>';
-            const sessions = await api('/sessions');
-
-            app.innerHTML = `
-                <div class="section">
-                    <h2>All Sessions (${sessions.length})</h2>
-                    <table>
-                        <thead><tr><th>Date</th><th>Status</th><th>Frames</th><th>Exposure</th><th></th></tr></thead>
-                        <tbody>
-                            ${sessions.map(s => `
-                                <tr>
-                                    <td>${s.date_obs.split('T')[0]}</td>
-                                    <td><span class="badge badge-${s.status}">${s.status}</span></td>
-                                    <td>${s.frame_count}</td>
-                                    <td>${s.total_exposure_h.toFixed(1)}h</td>
-                                    <td><span class="link" onclick="showPage('session', ${s.id})">Details →</span></td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                </div>
-            `;
-        }
-
-        // --- Session Detail ---
-        async function renderSessionDetail(sessionId) {
-            const app = document.getElementById('app');
-            app.innerHTML = '<div class="loading">Loading session...</div>';
-
-            const session = await api('/sessions/' + sessionId);
-            const frames = await api('/frames?session_id=' + sessionId + '&limit=1000');
-
-            const byFilter = {};
-            frames.forEach(f => {
-                const key = f.filter_name || 'unknown';
-                if (!byFilter[key]) byFilter[key] = [];
-                byFilter[key].push(f);
-            });
-
-            app.innerHTML = `
-                <div class="back-link">
-                    <span class="link" onclick="showPage('targets')">← Back to Targets</span>
-                </div>
-                <div class="section">
-                    <h2>Session: ${frames.length > 0 ? frames[0].object_name : 'Unknown'}</h2>
-                    <div class="session-meta">
-                        <div class="meta-item">
-                            <div class="label">Date</div>
-                            <div class="value">${session.date_obs.split('T')[0]}</div>
-                        </div>
-                        <div class="meta-item">
-                            <div class="label">Status</div>
-                            <div class="value"><span class="badge badge-${session.status}">${session.status}</span></div>
-                        </div>
-                        <div class="meta-item">
-                            <div class="label">Frames</div>
-                            <div class="value">${session.frame_count}</div>
-                        </div>
-                        <div class="meta-item">
-                            <div class="label">Total Exposure</div>
-                            <div class="value">${session.total_exposure_h.toFixed(2)}h</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="section">
-                    <h2>Frames by Filter</h2>
-                    ${Object.entries(byFilter).map(([filter, filterFrames]) => `
-                        <h3 style="margin: 16px 0 8px; font-size: 14px; color: var(--accent3);">${filter}: ${filterFrames.length} frames (${(filterFrames.reduce((sum, f) => sum + (f.exposure || 0), 0) / 3600).toFixed(2)}h)</h3>
-                        <table>
-                            <thead><tr><th>File</th><th>Type</th><th>Exp</th><th>Gain</th><th>Temp</th><th>Bin</th></tr></thead>
-                            <tbody>
-                                ${filterFrames.slice(0, 20).map(f => `
-                                    <tr>
-                                        <td style="font-family: monospace; font-size: 13px;">${f.filename}</td>
-                                        <td>${f.frame_type}</td>
-                                        <td>${f.exposure}s</td>
-                                        <td>${f.gain ?? '-'}</td>
-                                        <td>${f.ccd_temp ? f.ccd_temp + '°C' : '-'}</td>
-                                        <td>${f.binning}x</td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                        ${filterFrames.length > 20 ? '<p style="color: var(--text-muted); margin-top: 8px;">... and ' + (filterFrames.length - 20) + ' more</p>' : ''}
-                    `).join('')}
-                </div>
-            `;
-        }
-
-        // --- Equipment ---
-        async function renderEquipment() {
-            const app = document.getElementById('app');
-            app.innerHTML = '<div class="loading">Loading equipment...</div>';
-
-            const [cameras, telescopes] = await Promise.all([
-                api('/cameras'),
-                api('/telescopes')
-            ]);
-
-            app.innerHTML = `
-                <div class="section">
-                    <h2>Cameras</h2>
-                    <table>
-                        <thead><tr><th>Name</th><th>Short Name</th><th>Pixel Size (µm)</th></tr></thead>
-                        <tbody>
-                            ${cameras.map(c => `
-                                <tr>
-                                    <td>${c.name}</td>
-                                    <td>${c.short_name || '-'}</td>
-                                    <td>${c.pixel_size_um || '-'}</td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                </div>
-                <div class="section">
-                    <h2>Telescopes</h2>
-                    <table>
-                        <thead><tr><th>Name</th><th>Short Name</th><th>Focal Length (mm)</th></tr></thead>
-                        <tbody>
-                            ${telescopes.map(t => `
-                                <tr>
-                                    <td>${t.name}</td>
-                                    <td>${t.short_name || '-'}</td>
-                                    <td>${t.focal_length_mm || '-'}</td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                </div>
-            `;
-        }
-
-        // --- Scan ---
-        const COMMON_PATHS = [
-            '/mnt/data/Astro/astro',
-            '/mnt/data/Astro/astro/ASI533MC',
-            '/mnt/data/Astro/astro/ASI2600MC',
-            '/mnt/data/Astro/astro/ASI1600MM',
-            '/mnt/data/Astro',
-        ];
-
-        async function renderScan() {
-            const app = document.getElementById('app');
-
-            // Check current scan status first
-            let status;
-            try {
-                status = await api('/scan/status');
-            } catch (e) {
-                status = { running: false, phase: 'idle' };
-            }
-
-            const isRunning = status.running;
-            const showProgress = isRunning || status.phase === 'done' || status.phase === 'error';
-
-            const pathOptions = COMMON_PATHS.map(p => `<option value="${p}">${p}</option>`).join('');
-
-            app.innerHTML = `
-                <div class="section">
-                    <h2>🔭 Scan FITS Files</h2>
-                    <div class="scan-info" style="margin-bottom: 24px;">
-                        Scans a directory for FITS files, extracts metadata from headers, and imports into the database.
-                        Duplicate files (by filepath) are automatically skipped.
-                        The scan runs in the background — you can navigate away and return to check progress.
-                    </div>
-
-                    <div class="scan-controls">
-                        <div>
-                            <label for="scan-path-select">Presets</label>
-                            <select id="scan-path-select" onchange="document.getElementById('scan-path-text').value = this.value">
-                                <option value="">-- Select a preset --</option>
-                                ${pathOptions}
-                            </select>
-                        </div>
-                        <div>
-                            <label for="scan-path-text">Custom path</label>
-                            <input type="text" id="scan-path-text" placeholder="/mnt/data/Astro/..." style="min-width: 350px;">
-                        </div>
-                        <div>
-                            <label>&nbsp;</label>
-                            <button class="btn ${isRunning ? '' : 'btn-success'}" id="start-scan-btn" onclick="startScan()" ${isRunning ? 'disabled' : ''}>
-                                ${isRunning ? 'Scan Running...' : 'Start Scan'}
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="progress-container ${showProgress ? 'visible' : ''}" id="progress-container">
-                        <div class="progress-header">
-                            <span class="status-text" id="status-text">${getStatusText(status)}</span>
-                            <span id="status-percent" style="font-size: 14px; color: var(--text-muted);">${getPercent(status)}%</span>
-                        </div>
-                        <div class="progress-bar-bg">
-                            <div class="progress-bar-fill" id="progress-fill" style="width: ${getPercent(status)}%"></div>
-                        </div>
-                        <div class="progress-stats">
-                            <div class="progress-stat">
-                                <div class="num" id="stat-total">${status.total || 0}</div>
-                                <div class="lbl">Total</div>
-                            </div>
-                            <div class="progress-stat">
-                                <div class="num" id="stat-processed" style="color: var(--accent);">${status.processed || 0}</div>
-                                <div class="lbl">Processed</div>
-                            </div>
-                            <div class="progress-stat">
-                                <div class="num" id="stat-imported" style="color: var(--accent2);">${status.imported || 0}</div>
-                                <div class="lbl">Imported</div>
-                            </div>
-                            <div class="progress-stat">
-                                <div class="num" id="stat-skipped" style="color: var(--accent3);">${status.skipped || 0}</div>
-                                <div class="lbl">Skipped</div>
-                            </div>
-                        </div>
-                        <div class="current-file" id="current-file">${status.current_file || ''}</div>
-                    </div>
-                </div>
-            `;
-
-            // If scan is running, start polling
-            if (isRunning) {
-                startPolling();
-            }
-        }
-
-        function getStatusText(status) {
-            switch(status.phase) {
-                case 'scanning': return 'Scanning FITS headers...';
-                case 'importing': return 'Importing to database...';
-                case 'done': return 'Done: ' + status.imported + ' frames imported';
-                case 'error': return 'Error: ' + (status.error || 'Unknown error');
-                default: return 'Idle';
-            }
-        }
-
-        function getStatusClass(status) {
-            return status.phase || 'idle';
-        }
-
-        function getPercent(status) {
-            if (!status.total || status.total === 0) return 0;
-            return Math.round((status.processed / status.total) * 100);
-        }
-
-        async function startScan() {
-            const path = document.getElementById('scan-path-text').value.trim();
-            if (!path) {
-                alert('Please select or enter a scan path.');
-                return;
-            }
-
-            const btn = document.getElementById('start-scan-btn');
-            btn.disabled = true;
-            btn.textContent = 'Starting...';
-
-            try {
-                const result = await apiPost('/scan', { path: path, recursive: true });
-                console.log('Scan started:', result);
-                startPolling();
-            } catch (e) {
-                alert('Failed to start scan: ' + e.message);
-                btn.disabled = false;
-                btn.textContent = 'Start Scan';
-            }
-        }
-
-        function startPolling() {
-            if (scanPollInterval) {
-                clearInterval(scanPollInterval);
-            }
-
-            scanPollInterval = setInterval(async () => {
-                try {
-                    const status = await api('/scan/status');
-                    updateProgressUI(status);
-
-                    if (!status.running) {
-                        clearInterval(scanPollInterval);
-                        scanPollInterval = null;
-                        // Re-enable button after a short delay
-                        setTimeout(() => {
-                            const btn = document.getElementById('start-scan-btn');
-                            if (btn) {
-                                btn.disabled = false;
-                                btn.textContent = 'Start Scan';
-                                btn.className = 'btn btn-success';
-                            }
-                        }, 500);
-                    }
-                } catch (e) {
-                    console.error('Poll error:', e);
-                }
-            }, 500);
-        }
-
-        function updateProgressUI(status) {
-            const container = document.getElementById('progress-container');
-            if (container) container.classList.add('visible');
-
-            const statusText = document.getElementById('status-text');
-            if (statusText) {
-                statusText.textContent = getStatusText(status);
-                statusText.className = 'status-text ' + getStatusClass(status);
-            }
-
-            const percent = getPercent(status);
-            const pctEl = document.getElementById('status-percent');
-            if (pctEl) pctEl.textContent = percent + '%';
-
-            const fill = document.getElementById('progress-fill');
-            if (fill) fill.style.width = percent + '%';
-
-            const totalEl = document.getElementById('stat-total');
-            if (totalEl) totalEl.textContent = status.total || 0;
-
-            const processedEl = document.getElementById('stat-processed');
-            if (processedEl) processedEl.textContent = status.processed || 0;
-
-            const importedEl = document.getElementById('stat-imported');
-            if (importedEl) importedEl.textContent = status.imported || 0;
-
-            const skippedEl = document.getElementById('stat-skipped');
-            if (skippedEl) skippedEl.textContent = status.skipped || 0;
-
-            const fileEl = document.getElementById('current-file');
-            if (fileEl) fileEl.textContent = status.current_file || '';
-        }
-
-        // Initial render
-        showPage('dashboard');
-    </script>
+// Initial load
+showPage('dashboard');
+</script>
 </body>
 </html>

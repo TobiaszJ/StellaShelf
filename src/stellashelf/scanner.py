@@ -21,6 +21,41 @@ from astropy.io import fits
 from rich.console import Console
 from rich.progress import Progress
 
+# ---------------------------------------------------------------------------
+# Coordinate parsing
+# ---------------------------------------------------------------------------
+
+def _parse_hms_to_degrees(hms_str: str) -> float | None:
+    """Parse HMS (HH MM SS.SS) string to degrees. 1h = 15deg."""
+    try:
+        parts = re.split(r"[\s:]+", hms_str.strip())
+        if len(parts) >= 3:
+            h, m, s = float(parts[0]), float(parts[1]), float(parts[2])
+            return (h + m / 60 + s / 3600) * 15
+        elif len(parts) == 2:
+            h, m = float(parts[0]), float(parts[1])
+            return (h + m / 60) * 15
+    except (ValueError, IndexError):
+        pass
+    return None
+
+
+def _parse_dms_to_degrees(dms_str: str) -> float | None:
+    """Parse DMS (+/-DD MM SS.SS) string to decimal degrees."""
+    try:
+        parts = re.split(r"[\s:]+", dms_str.strip())
+        if len(parts) >= 3:
+            sign = -1 if parts[0].startswith("-") else 1
+            d, m, s = abs(float(parts[0])), float(parts[1]), float(parts[2])
+            return sign * (d + m / 60 + s / 3600)
+        elif len(parts) == 2:
+            sign = -1 if parts[0].startswith("-") else 1
+            d, m = abs(float(parts[0])), float(parts[1])
+            return sign * (d + m / 60)
+    except (ValueError, IndexError):
+        pass
+    return None
+
 console = Console()
 
 # ---------------------------------------------------------------------------
@@ -129,17 +164,36 @@ def _normalize_frame_type(raw: str) -> str:
 def _extract_object_from_filename(filename: str) -> str:
     """Try to extract object name from filename patterns like M42_Ha.fit, NGC7000_L_300s.fit."""
     # Common patterns: M42, NGC7000, IC434, SH2-101, LDN1235, vdB123
+    # The key: match the catalog prefix BEFORE the first underscore
+    stem = filename.split("_")[0] if "_" in filename else filename
+    # Remove file extension
+    for ext in (".fit", ".fits", ".fit.gz", ".xisf"):
+        if stem.lower().endswith(ext):
+            stem = stem[: -len(ext)]
+            break
+
+    # Try known catalog patterns
+    import re
     patterns = [
-        r"^([A-Z]{1,2}\d+[a-zA-Z]?)_",       # M42_, NGC7000_, IC434_
-        r"^(SH[A-Za-z]?[-_]?\d+)_",           # SH2-101_, SH2_101_
-        r"^(LDN\s*\d+)_",                     # LDN1235_
-        r"^(vdB\s*\d+)_",                     # vdB123_
-        r"^(M\s*\d+[a-zA-Z]?)_",              # M 42_ (with space)
+        r"^(M\s*\d+[a-zA-Z]?)$",              # M42, M31-2, M 42
+        r"^(NGC\s*\d+[a-zA-Z]?)$",            # NGC7000, NGC 6992
+        r"^(IC\s*\d+[a-zA-Z]?)$",             # IC434, IC 1396
+        r"^(SH[A-Za-z]?[-_]?\d+)$",            # SH2-101, SH2_101
+        r"^(LDN\s*\d+)$",                     # LDN1235
+        r"^(vdB\s*\d+)$",                     # vdB123
+        r"^(B\s*\d+)$",                       # B137 (Barnard)
+        r"^(C\s*\d+)$",                       # C20 (Caldwell)
     ]
     for pat in patterns:
-        m = re.match(pat, filename, re.IGNORECASE)
+        m = re.match(pat, stem, re.IGNORECASE)
         if m:
             return m.group(1).strip().upper()
+
+    # Fallback: if stem starts with letters+digits, return it
+    m = re.match(r"^([A-Z]{1,5}\s*\d+[a-zA-Z0-9-]*)", stem, re.IGNORECASE)
+    if m:
+        return m.group(1).strip().upper()
+
     return ""
 
 
