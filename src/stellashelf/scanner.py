@@ -67,13 +67,15 @@ def _parse_dms_to_degrees(dms_str: str) -> float | None:
 # ---------------------------------------------------------------------------
 
 # Known camera folder names under Astro/astro/
-_KNOWN_CAMERAS = frozenset({
-    "ASI183MMPro",
-    "ASI2600MMPro",
-    "ASI2600MMPro2",
-    "ASI294MMPro",
-    "ASI533MCPro",
-})
+_KNOWN_CAMERAS = frozenset(
+    {
+        "ASI183MMPro",
+        "ASI2600MMPro",
+        "ASI2600MMPro2",
+        "ASI294MMPro",
+        "ASI533MCPro",
+    }
+)
 
 # Regex: match Astro/astro/<CAMERA>/ where CAMERA is a known camera name
 _CAMERA_PATH_RE = re.compile(
@@ -263,7 +265,7 @@ def _normalize_frame_type(raw: str) -> str:
 def _extract_object_from_filename(filename: str) -> str:
     """Try to extract object name from filename patterns like M42_Ha.fit, NGC7000_L_300s.fit."""
     stem = filename.split("_")[0] if "_" in filename else filename
-    for ext in (".fit", ".fits", ".fit.gz", ".xisf"):
+    for ext in (".fit", ".fits", ".fit.gz", ".fits.gz", ".xisf"):
         if stem.lower().endswith(ext):
             stem = stem[: -len(ext)]
             break
@@ -305,9 +307,13 @@ def scan_fits_file(filepath: Path) -> ScannedFrame:
             # String fields — path extraction is PRIMARY, FITS header is fallback
             frame.object_name = str(header.get("OBJECT", "")).strip()
             path_camera = _extract_camera_from_path(filepath)
-            frame.instrume = path_camera if path_camera else str(header.get("INSTRUME", "")).strip()
+            instrume_val = path_camera if path_camera else str(header.get("INSTRUME", "")).strip()
+            frame.instrume = instrume_val
             path_telescope = _extract_telescope_from_path(filepath)
-            frame.telescop = path_telescope if path_telescope else str(header.get("TELESCOP", "")).strip()
+            telescop_val = (
+                path_telescope if path_telescope else str(header.get("TELESCOP", "")).strip()
+            )
+            frame.telescop = telescop_val
             frame.filter_name = str(header.get("FILTER", "")).strip()
             frame.site_name = str(header.get("SITENAME", "")).strip()
             frame.observer = str(header.get("OBSERVER", "")).strip()
@@ -544,6 +550,7 @@ def platesolve_frame(filepath: Path, astap_binary: str = "astap") -> dict | None
     import subprocess
     import tempfile
 
+    tmp_path = None
     try:
         # ASTAP can output coordinates to a text file
         with tempfile.NamedTemporaryFile(suffix=".txt", delete=False, mode="w+") as tmp:
@@ -562,7 +569,6 @@ def platesolve_frame(filepath: Path, astap_binary: str = "astap") -> dict | None
         # Parse the output for coordinates
         if Path(tmp_path).exists():
             content = Path(tmp_path).read_text()
-            Path(tmp_path).unlink(missing_ok=True)
 
             ra_match = re.search(r"RA\s*=\s*([\d.]+)", content, re.IGNORECASE)
             dec_match = re.search(r"DEC\s*=\s*([-\d.]+)", content, re.IGNORECASE)
@@ -576,6 +582,9 @@ def platesolve_frame(filepath: Path, astap_binary: str = "astap") -> dict | None
         return None
     except Exception:
         return None
+    finally:
+        if tmp_path and Path(tmp_path).exists():
+            Path(tmp_path).unlink(missing_ok=True)
 
 
 def scan_directory(

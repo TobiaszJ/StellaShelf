@@ -10,7 +10,7 @@ from sqlalchemy import text
 
 from stellashelf.db import CalibrationFile, Camera, Frame, Target, Telescope, init_db
 from stellashelf.db import Session as ObsSession
-from stellashelf.scanner import generate_group_key, generate_thumbnail, scan_directory
+from stellashelf.scanner import generate_group_key, scan_directory
 
 
 class ImporterService:
@@ -242,23 +242,5 @@ class ImporterService:
             stats["imported"] = imported_count
             stats["skipped"] = skipped_count
             stats["calibration_files"] = cal_files_count
-
-        # Generate thumbnails for newly imported light frames
-        if imported_count > 0:
-            try:
-                with SessionLocal() as session:
-                    light_frames = (
-                        session.query(Frame)
-                        .filter(Frame.frame_type == "LIGHT")
-                        .order_by(Frame.date_obs.desc())
-                        .limit(20)
-                        .all()
-                    )
-                    for f in light_frames:
-                        fp = Path(f.filepath)
-                        if fp.exists():
-                            generate_thumbnail(fp)
-            except Exception:
-                pass
 
         return stats

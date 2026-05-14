@@ -21,45 +21,48 @@ from stellashelf.db import CalibrationFile, Camera, Frame, Setting, Target, Tele
 from stellashelf.db import Session as ObsSession
 from stellashelf.importer import ImporterService
 
-# Module-level db path, can be overridden via create_app() or set_db_path()
+# ---------------------------------------------------------------------------
+# App initialization
+# ---------------------------------------------------------------------------
+
 _db_path: Path = DEFAULT_DB_PATH
+_engine = None
+_session_local = None
+_engine_lock = threading.Lock()
 
 
 def set_db_path(path: Path) -> None:
-    """Override the database path used by the API."""
-    global _db_path
-    _db_path = path
+    """Override the database path and reset cached engine."""
+    global _db_path, _engine, _session_local
+    with _engine_lock:
+        _db_path = path
+        _engine = None
+        _session_local = None
 
 
 def get_session_local():
-    """Initialize and return engine, SessionLocal."""
-    if not _db_path.exists():
-        raise RuntimeError(f"Database not found at {_db_path}. Run 'stellashelf scan' first.")
-    return init_db(_db_path)
-
-
-def create_app(db_path: Path | None = None) -> FastAPI:
-    """Create and configure the FastAPI application.
-
-    Args:
-        db_path: Path to the SQLite database. Defaults to ~/.stellashelf/stellashelf.db.
-    """
-    if db_path is not None:
-        set_db_path(db_path)
-
-    # Allow CORS for local development
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-
-    return app
+    """Return cached (engine, SessionLocal), initializing once."""
+    global _engine, _session_local
+    if _session_local is None:
+        with _engine_lock:
+            if _session_local is None:
+                if not _db_path.exists():
+                    raise RuntimeError(
+                        f"Database not found at {_db_path}. Run 'stellashelf scan' first."
+                    )
+                _engine, _session_local = init_db(_db_path)
+    return _engine, _session_local
 
 
 app = FastAPI(title="StellaShelf", version="0.2.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # ---------------------------------------------------------------------------
@@ -160,9 +163,9 @@ class FrameSchema(BaseModel):
     session_id: int | None
     filename: str
     filepath: str
-    frame_type: str
-    object_name: str
-    filter_name: str
+    frame_type: str | None = None
+    object_name: str | None = None
+    filter_name: str | None = None
     exposure: float | None
     gain: int | None
     ccd_temp: float | None
@@ -259,17 +262,17 @@ def search_all(
     engine, SessionLocal = get_session_local()
     with SessionLocal() as session:
         # Search frames via FTS5
-        fts_results = (
-            session.query(
-                Frame.id, Frame.object_name, Frame.filename, Frame.frame_type, Frame.date_obs
-            )
-            .filter(
-                text("frames_fts MATCH :q"),
-            )
-            .params(q=q)
-            .limit(limit)
-            .all()
-        )
+        fts_results = session.execute(
+            text(
+                "SELECT frames.id, frames.object_name, frames.filename, "
+                "frames.frame_type, frames.date_obs "
+                "FROM frames "
+                "JOIN frames_fts ON frames_fts.rowid = frames.id "
+                "WHERE frames_fts MATCH :q "
+                "LIMIT :limit"
+            ),
+            {"q": q, "limit": limit},
+        ).fetchall()
 
         # Search targets by name
         target_results = (
@@ -570,7 +573,7 @@ def list_target_types():
 def get_target(target_id: int):
     engine, SessionLocal = get_session_local()
     with SessionLocal() as session:
-        target = session.query(Target).get(target_id)
+        target = session.get(Target, target_id)
         if not target:
             raise HTTPException(status_code=404, detail="Target not found")
         session_count = (
@@ -605,7 +608,7 @@ def get_target_sessions(
 ):
     engine, SessionLocal = get_session_local()
     with SessionLocal() as session:
-        target = session.query(Target).get(target_id)
+        target = session.get(Target, target_id)
         if not target:
             raise HTTPException(status_code=404, detail="Target not found")
 
@@ -627,7 +630,7 @@ def get_target_sessions(
             .outerjoin(Telescope, Telescope.id == ObsSession.telescope_id)
             .filter(ObsSession.target_id == target_id)
         )
-        if camera_id:
+        if camera_id is not None:
             q = q.filter(ObsSession.camera_id == camera_id)
 
         total = q.count()
@@ -707,9 +710,17 @@ def list_sessions(
         if status is not None:
             q = q.filter(ObsSession.status == status)
         if date_from:
-            q = q.filter(ObsSession.date_obs >= datetime.fromisoformat(date_from))
+            try:
+                q = q.filter(ObsSession.date_obs >= datetime.fromisoformat(date_from))
+            except ValueError as err:
+                raise HTTPException(
+                    status_code=400, detail=f"Invalid date_from: {date_from}"
+                ) from err
         if date_to:
-            q = q.filter(ObsSession.date_obs <= datetime.fromisoformat(date_to))
+            try:
+                q = q.filter(ObsSession.date_obs <= datetime.fromisoformat(date_to))
+            except ValueError as err:
+                raise HTTPException(status_code=400, detail=f"Invalid date_to: {date_to}") from err
 
         total = q.count()
         pages = (total + page_size - 1) // page_size
@@ -793,7 +804,7 @@ def get_session_stats(session_id: int):
     """Get aggregated stats for a session: exposure per filter, frames per type."""
     engine, SessionLocal = get_session_local()
     with SessionLocal() as session:
-        obs = session.query(ObsSession).get(session_id)
+        obs = session.get(ObsSession, session_id)
         if not obs:
             raise HTTPException(status_code=404, detail="Session not found")
 
@@ -885,7 +896,7 @@ def get_frame_thumbnail(frame_id: int):
     """Get a JPEG thumbnail for a specific frame."""
     engine, SessionLocal = get_session_local()
     with SessionLocal() as session:
-        frame = session.query(Frame).get(frame_id)
+        frame = session.get(Frame, frame_id)
         if not frame:
             raise HTTPException(status_code=404, detail="Frame not found")
 
@@ -907,7 +918,7 @@ def get_target_thumbnails(target_id: int, limit: int = Query(6, ge=1, le=20)):
     """Get thumbnails for recent frames of a target."""
     engine, SessionLocal = get_session_local()
     with SessionLocal() as session:
-        target = session.query(Target).get(target_id)
+        target = session.get(Target, target_id)
         if not target:
             raise HTTPException(status_code=404, detail="Target not found")
 
@@ -977,7 +988,6 @@ def list_cameras():
                 short_name=r.short_name,
                 pixel_size_um=r.pixel_size_um,
                 frame_count=r.frame_count,
-                folder_path=r.folder_path,
                 total_exposure_h=round(r.total_s / 3600, 1),
             )
             for r in results
@@ -1010,7 +1020,6 @@ def list_telescopes():
                 short_name=r.short_name,
                 focal_length_mm=r.focal_length_mm,
                 frame_count=r.frame_count,
-                folder_path=r.folder_path,
                 total_exposure_h=round(r.total_s / 3600, 1),
             )
             for r in results

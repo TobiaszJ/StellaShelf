@@ -35,9 +35,9 @@ export interface Frame {
   session_id: number | null
   filename: string
   filepath: string
-  frame_type: string
-  object_name: string
-  filter_name: string
+  frame_type: string | null
+  object_name: string | null
+  filter_name: string | null
   exposure: number | null
   gain: number | null
   ccd_temp: number | null
@@ -51,7 +51,6 @@ export interface Camera {
   short_name: string | null
   pixel_size_um: number | null
   frame_count: number
-  folder_path: string | null
   total_exposure_h: number
 }
 
@@ -61,14 +60,12 @@ export interface Telescope {
   short_name: string | null
   focal_length_mm: number | null
   frame_count: number
-  folder_path: string | null
   total_exposure_h: number
 }
 
 export interface FilterStat {
   name: string
   frame_count: number
-  folder_path: string | null
   total_exposure_h: number
 }
 
@@ -84,7 +81,7 @@ export interface DashboardData {
   total_sessions: number
   total_targets: number
   top_targets: Array<{ id: number; name: string; total_exposure_h: number; session_count: number }>
-  recent_sessions: Array<{ id: number; target_id: number; target_name: string; date_obs: string; total_exposure_h: number; frame_count: number }>
+  recent_sessions: Array<{ id: number; target_id: number; target_name: string; date_obs: string | null; total_exposure_h: number; frame_count: number }>
   cameras: Array<{ id: number; name: string; short_name: string | null; frame_count: number; total_exposure_h: number }>
 }
 
@@ -94,6 +91,7 @@ export interface ScanState {
   processed: number
   imported: number
   skipped: number
+  calibration_files: number
   current_file: string
   phase: string
   error: string | null

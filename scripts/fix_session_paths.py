@@ -5,7 +5,6 @@ Computes the longest common prefix directory for all frames in a session.
 
 import sys
 from pathlib import Path
-from collections import Counter
 
 # Ensure project root is on sys.path
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent

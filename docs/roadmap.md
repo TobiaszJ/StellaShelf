@@ -2,7 +2,7 @@
 
 ## Current Status: Browse & Search + Settings Complete ✅
 
-The core scanning, database, and API infrastructure is operational. The Vue 3 frontend provides a modern browsing experience with 12 views, search, thumbnails, dark mode, and settings.
+The core scanning, database, and API infrastructure is operational. The Vue 3 frontend provides a modern browsing experience with 11 views, search, thumbnails, dark mode, and settings.
 
 ## Completed Milestones
 

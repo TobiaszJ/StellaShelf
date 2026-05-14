@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useApiStore, type Session, type PaginatedResponse } from '@/stores/api'
 import Pagination from '@/components/Pagination.vue'
 
 const apiStore = useApiStore()
 const router = useRouter()
+const route = useRoute()
 const sessions = ref<Session[]>([])
 const page = ref(1)
 const totalPages = ref(1)
@@ -16,8 +17,12 @@ const sortBy = ref('date_obs')
 function shortPath(path: string | null | undefined): string {
   if (!path) return '-'
   const parts = path.split('/')
-  // Show last 3 parts (e.g. .../Camera/Telescope/Target)
   return parts.length > 3 ? '.../' + parts.slice(-3).join('/') : path
+}
+
+// Read filter query param from Equipment view navigation
+if (route.query.filter) {
+  statusFilter.value = route.query.filter as string
 }
 
 async function load() {

@@ -38,7 +38,7 @@ chore(deps): update astropy to 7.x
 
 Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `perf`
 
-Scopes: `scanner`, `api`, `db`, `ui`, `pipeline`, `docs`
+Scopes: `scanner`, `api`, `db`, `ui`, `importer`, `config`, `docs`
 
 ## Pull Requests
 

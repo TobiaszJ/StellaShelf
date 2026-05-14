@@ -1,25 +1,18 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import axios from 'axios'
-
-export interface ScanState {
-  running: boolean
-  total: number
-  processed: number
-  imported: number
-  skipped: number
-  current_file: string
-  phase: string
-  error: string | null
-}
+import { ref, computed, watch } from 'vue'
+import { useApiStore } from './api'
+import type { ScanState } from './api'
 
 export const useScanStore = defineStore('scan', () => {
+  const apiStore = useApiStore()
+
   const state = ref<ScanState>({
     running: false,
     total: 0,
     processed: 0,
     imported: 0,
     skipped: 0,
+    calibration_files: 0,
     current_file: '',
     phase: 'idle',
     error: null,
@@ -42,8 +35,8 @@ export const useScanStore = defineStore('scan', () => {
 
   async function fetchStatus() {
     try {
-      const res = await axios.get('/api/v1/scan/status')
-      state.value = res.data
+      const data = await apiStore.fetch<ScanState>('/scan/status')
+      state.value = data
     } catch {
       // ignore polling errors
     }
@@ -63,31 +56,28 @@ export const useScanStore = defineStore('scan', () => {
   }
 
   async function startScan(path: string) {
-    const res = await axios.post('/api/v1/scan', { path, recursive: true })
+    const res = await apiStore.post<{ status: string; path: string }>('/scan', { path, recursive: true })
     state.value = {
       running: true,
       total: 0,
       processed: 0,
       imported: 0,
       skipped: 0,
+      calibration_files: 0,
       current_file: 'Initialisiere...',
       phase: 'scanning',
       error: null,
     }
     startPolling()
-    return res.data
+    return res
   }
 
   // Watch for completion/error to stop polling
-  let lastPhase = state.value.phase
-  setInterval(() => {
-    if (state.value.phase !== lastPhase) {
-      lastPhase = state.value.phase
-      if (state.value.phase === 'done' || state.value.phase === 'error') {
-        stopPolling()
-      }
+  watch(() => state.value.phase, (newPhase) => {
+    if (newPhase === 'done' || newPhase === 'error') {
+      stopPolling()
     }
-  }, 600)
+  })
 
   return { state, progress, phaseLabel, startScan, startPolling, stopPolling, fetchStatus }
 })

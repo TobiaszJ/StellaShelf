@@ -21,6 +21,7 @@ dependencies = [
     "pydantic>=2.6",
     "rich>=13.7",
     "click>=8.1",
+    "pillow>=10.0",
 ]
 
 [project.optional-dependencies]
@@ -55,6 +56,9 @@ ignore = ["N806"]  # SQLAlchemy convention uses SessionLocal (uppercase L)
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+    "integration: marks tests that require local astro data",
+]
 
 [tool.mypy]
 python_version = "3.11"

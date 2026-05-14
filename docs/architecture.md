@@ -89,7 +89,7 @@ Scan Directory
     └─► Write to SQLite + FTS5 index
 ```
 
-## observed Data Structures
+## Observed Data Structures
 
 ### Directory Layout (per user)
 
@@ -171,6 +171,7 @@ The `ImporterService` in `importer.py` centralizes all import logic, eliminating
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
+| `/api/v1/health` | GET | Health check and database path |
 | `/api/v1/dashboard` | GET | Aggregated dashboard data |
 | `/api/v1/search?q=...` | GET | Full-text search via FTS5 |
 | `/api/v1/targets` | GET | List targets (paginated, filterable by type/constellation) |
