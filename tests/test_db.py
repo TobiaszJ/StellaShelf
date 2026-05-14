@@ -1,9 +1,9 @@
 """Database model tests."""
 
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
-from stellashelf.db import init_db, Target, Session, Frame, Camera, Telescope, CalibrationFile
+from stellashelf.db import CalibrationFile, Camera, Frame, Session, Target, Telescope, init_db
 
 
 class TestDatabase:
@@ -31,7 +31,9 @@ class TestDatabase:
             with SessionLocal() as session:
                 from datetime import datetime
 
-                target = Target(name="NGC 7000", object_type="Emission Nebula", constellation="Cygnus")
+                target = Target(
+                    name="NGC 7000", object_type="Emission Nebula", constellation="Cygnus"
+                )
                 camera = Camera(name="ASI294MMPro", short_name="ASI294MMPro", pixel_size_um=4.63)
                 telescope = Telescope(name="_140PH", short_name="140PH", focal_length_mm=676)
                 session.add_all([target, camera, telescope])

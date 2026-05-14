@@ -1,21 +1,21 @@
 """StellaShelf scanner tests — unit + integration against real FITS data."""
 
 import os
-import pytest
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+
+import pytest
 
 from stellashelf.scanner import (
-    scan_fits_file,
-    scan_directory,
-    find_fits_files,
-    parse_filename,
-    generate_group_key,
     ScannedFrame,
-    _parse_hms_to_degrees,
-    _parse_dms_to_degrees,
-    _normalize_frame_type,
     _extract_object_from_filename,
+    _normalize_frame_type,
+    _parse_dms_to_degrees,
+    _parse_hms_to_degrees,
+    generate_group_key,
+    parse_filename,
+    scan_directory,
+    scan_fits_file,
 )
 
 # Real data path on the workstation (NFS-mounted)
@@ -250,7 +250,7 @@ class TestRealFITS:
         qhy_dir = ASTRO_DATA / "nas" / "QHY8L"
         if not qhy_dir.exists():
             # Try other QHY8L locations
-            for root, dirs, files in os.walk(ASTRO_DATA):
+            for root, _dirs, files in os.walk(ASTRO_DATA):
                 for f in files[:10]:
                     if f.endswith(".fit"):
                         fp = Path(root) / f
@@ -258,7 +258,9 @@ class TestRealFITS:
                             frame = scan_fits_file(fp)
                             if frame.instrume == "QHY8L" and frame.exposure:
                                 # Should be in seconds, not ms
-                                assert frame.exposure < 10000, f"Exposure {frame.exposure} still in ms for {fp}"
+                                assert frame.exposure < 10000, (
+                                    f"Exposure {frame.exposure} still in ms for {fp}"
+                                )
                                 return
                         except Exception:
                             pass
@@ -272,7 +274,7 @@ class TestRealFITS:
 
     def test_hms_dms_parsing(self):
         """Test that HMS/DMS coordinates are properly parsed."""
-        for root, dirs, files in os.walk(ASTRO_DATA):
+        for root, _dirs, files in os.walk(ASTRO_DATA):
             for f in files[:50]:
                 if f.endswith(".fit"):
                     fp = Path(root) / f

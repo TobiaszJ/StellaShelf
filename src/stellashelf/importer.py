@@ -3,19 +3,15 @@ ImporterService handles the orchestration of scanning files and importing them i
 This service centralizes the logic previously duplicated in the CLI and API.
 """
 
-import threading
-from datetime import datetime
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Dict, Set, List, Optional, Tuple
 
 from sqlalchemy import text
-from sqlalchemy.orm import Session as SaSession
 
-from stellashelf.db import (
-    Target, Session as ObsSession, Frame, Camera, Telescope, 
-    CalibrationFile, init_db
-)
-from stellashelf.scanner import scan_directory, generate_group_key, generate_thumbnail
+from stellashelf.db import CalibrationFile, Camera, Frame, Target, Telescope, init_db
+from stellashelf.db import Session as ObsSession
+from stellashelf.scanner import generate_group_key, generate_thumbnail, scan_directory
+
 
 class ImporterService:
     """
@@ -28,60 +24,62 @@ class ImporterService:
     def __init__(self, db_path: Path):
         self.db_path = db_path.resolve()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
     def import_from_path(
-        self, 
-        root_path: Path, 
+        self,
+        root_path: Path,
         recursive: bool = True,
-        progress_callback: Optional[Callable[[int, int, Path], None]] = None
-    ) -> Dict[str, int]:
+        progress_callback: Callable[[int, int, Path], None] | None = None,
+    ) -> dict[str, int]:
         """
         Performs the full scan and import process.
-        
+
         Returns a dictionary containing:
             imported: Number of new frames added.
             skipped: Number of duplicate frames skipped.
             calibration_files: Number of calibration files identified.
         """
         engine, SessionLocal = init_db(self.db_path)
-        
+
         # 1. Perform the scan
-        frames = scan_directory(
-            root_path, 
-            recursive=recursive, 
-            progress_callback=progress_callback
-        )
-        
-        stats = {
-            "imported": 0,
-            "skipped": 0,
-            "calibration_files": 0
-        }
+        frames = scan_directory(root_path, recursive=recursive, progress_callback=progress_callback)
+
+        stats = {"imported": 0, "skipped": 0, "calibration_files": 0}
 
         if not frames:
             return stats
 
         with SessionLocal() as session:
             # Pre-load existing data to avoid redundant queries and ensure speed
-            existing_paths: Set[str] = {row[0] for row in session.query(Frame.filepath).all()}
-            sessions_by_key: Dict[str, int] = {row[1]: row[0] for row in session.query(ObsSession.id, ObsSession.group_key).all()}
-            cameras_by_name: Dict[str, int] = {row[1]: row[0] for row in session.query(Camera.id, Camera.name).all()}
-            telescopes_by_name: Dict[str, int] = {row[1] : row[0] for row in session.query(Telescope.id, Telescope.name).all()}
-            targets_by_name: Dict[str, int] = {row[1]: row[0] for row in session.query(Target.id, Target.name).all()}
+            existing_paths: set[str] = {row[0] for row in session.query(Frame.filepath).all()}
+            sessions_by_key: dict[str, int] = {
+                row[1]: row[0] for row in session.query(ObsSession.id, ObsSession.group_key).all()
+            }
+            cameras_by_name: dict[str, int] = {
+                row[1]: row[0] for row in session.query(Camera.id, Camera.name).all()
+            }
+            telescopes_by_name: dict[str, int] = {
+                row[1]: row[0] for row in session.query(Telescope.id, Telescope.name).all()
+            }
+            targets_by_name: dict[str, int] = {
+                row[1]: row[0] for row in session.query(Target.id, Target.name).all()
+            }
 
             cal_files_count = 0
             imported_count = 0
             skipped_count = 0
-            
+
             # Batching configuration
             BATCH_SIZE = 500
             batch_counter = 0
 
             for i, frame in enumerate(frames):
                 # Determine if this is a calibration file
-                is_calibration = (
-                    not frame.object_name and 
-                    frame.frame_type in ("BIAS", "DARK", "FLAT", "FLATFIELD")
+                is_calibration = not frame.object_name and frame.frame_type in (
+                    "BIAS",
+                    "DARK",
+                    "FLAT",
+                    "FLATFIELD",
                 )
 
                 # 1. Handle Equipment (Camera/Telescope)
@@ -90,8 +88,10 @@ class ImporterService:
                     if frame.instrume not in cameras_by_name:
                         camera = Camera(
                             name=frame.instrume,
-                            short_name=frame.instrume.replace("ZWO ", "").replace("ASI Camera", "ASI"),
-                            pixel_size_um=frame.pixel_size_um
+                            short_name=frame.instrume.replace("ZWO ", "").replace(
+                                "ASI Camera", "ASI"
+                            ),
+                            pixel_size_um=frame.pixel_size_um,
                         )
                         session.add(camera)
                         session.flush()
@@ -104,7 +104,7 @@ class ImporterService:
                         telescope = Telescope(
                             name=frame.telescop,
                             short_name=frame.telescop,
-                            focal_length_mm=frame.focal_length_mm
+                            focal_length_mm=frame.focal_length_mm,
                         )
                         session.add(telescope)
                         session.flush()
@@ -133,7 +133,7 @@ class ImporterService:
                 # 3. Handle Target and Session
                 target_id = None
                 obj_name = frame.object_name.strip() if frame.object_name else ""
-                
+
                 if obj_name and obj_name != "UNKNOWN":
                     if obj_name not in targets_by_name:
                         target = Target(name=obj_name)
@@ -157,7 +157,7 @@ class ImporterService:
                     if progress_callback:
                         progress_callback(i + 1, len(frames), frame.filepath)
                     continue
-                
+
                 existing_paths.add(fp_str)
 
                 # 5. Session Management
@@ -165,7 +165,9 @@ class ImporterService:
                 obs_id = sessions_by_key.get(group_key)
 
                 if obs_id is None:
-                    existing_session = session.query(ObsSession).filter_by(group_key=group_key).first()
+                    existing_session = (
+                        session.query(ObsSession).filter_by(group_key=group_key).first()
+                    )
                     if existing_session:
                         obs_id = existing_session.id
                         sessions_by_key[group_key] = obs_id
@@ -213,7 +215,7 @@ class ImporterService:
                 )
                 session.add(new_frame)
                 imported_count += 1
-                
+
                 if progress_callback:
                     progress_callback(i + 1, len(frames), frame.filepath)
 
@@ -223,16 +225,18 @@ class ImporterService:
                     batch_counter = 0
 
             session.commit()
-            
+
             # Recalculate session stats
-            session.execute(text(
-                """
+            session.execute(
+                text(
+                    """
                 UPDATE sessions SET
                     frame_count = (SELECT COUNT(*) FROM frames WHERE frames.session_id = sessions.id),
                     total_exposure_s = COALESCE((SELECT SUM(frames.exposure) FROM frames WHERE frames.session_id = sessions.id), 0),
                     total_exposure_h = COALESCE((SELECT SUM(frames.exposure) FROM frames WHERE frames.session_id = sessions.id), 0) / 3600.0
                 """
-            ))
+                )
+            )
             session.commit()
 
             stats["imported"] = imported_count

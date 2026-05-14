@@ -7,21 +7,20 @@ from datetime import datetime
 from pathlib import Path
 
 from sqlalchemy import (
+    Boolean,
     Column,
-    Integer,
+    DateTime,
     Float,
+    ForeignKey,
+    Index,
+    Integer,
     String,
     Text,
-    DateTime,
-    ForeignKey,
-    Boolean,
-    Index,
-    UniqueConstraint,
     create_engine,
     event,
+    text,
 )
-from sqlalchemy import text
-from sqlalchemy.orm import DeclarativeBase, relationship, Session as SaSession, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, relationship, sessionmaker
 
 
 class Base(DeclarativeBase):
@@ -131,9 +130,7 @@ class Session(Base):
     telescope = relationship("Telescope", back_populates="sessions")
     frames = relationship("Frame", back_populates="obs_session", cascade="all, delete-orphan")
 
-    __table_args__ = (
-        Index("ix_sessions_target_date", "target_id", "date_obs"),
-    )
+    __table_args__ = (Index("ix_sessions_target_date", "target_id", "date_obs"),)
 
 
 # ---------------------------------------------------------------------------
@@ -188,9 +185,7 @@ class Frame(Base):
 
     scanned_at = Column(DateTime, default=lambda: datetime.now())
 
-    __table_args__ = (
-        Index("ix_frames_type_object", "frame_type", "object_name"),
-    )
+    __table_args__ = (Index("ix_frames_type_object", "frame_type", "object_name"),)
 
 
 # ---------------------------------------------------------------------------

@@ -7,7 +7,6 @@ Supports pagination, filtering, and full-text search.
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,8 +14,10 @@ from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func as sa_func
+from sqlalchemy import text
 
-from stellashelf.db import init_db, Target, Session as ObsSession, Frame, Camera, Telescope, CalibrationFile, Setting
+from stellashelf.db import CalibrationFile, Camera, Frame, Setting, Target, Telescope, init_db
+from stellashelf.db import Session as ObsSession
 from stellashelf.importer import ImporterService
 
 DB_PATH = Path("~/stellashelf/stellashelf.db").expanduser().resolve()
@@ -61,12 +62,14 @@ _scan_state: dict = {
 
 def _make_scan_progress_callback():
     """Create a progress callback for the scanner that updates _scan_state."""
+
     def callback(processed: int, total: int, current_file: Path):
         with _scan_lock:
             _scan_state["processed"] = processed
             _scan_state["total"] = total
             _scan_state["current_file"] = str(current_file)
             _scan_state["phase"] = "scanning"
+
     return callback
 
 
@@ -102,14 +105,15 @@ def _run_scan_task(root: Path, recursive: bool):
 # Pydantic schemas
 # ---------------------------------------------------------------------------
 
+
 class TargetSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
-    object_type: Optional[str] = None
-    constellation: Optional[str] = None
-    ra_deg: Optional[float] = None
-    dec_deg: Optional[float] = None
+    object_type: str | None = None
+    constellation: str | None = None
+    ra_deg: float | None = None
+    dec_deg: float | None = None
     session_count: int = 0
     total_exposure_h: float = 0
 
@@ -119,9 +123,9 @@ class SessionSchema(BaseModel):
     id: int
     target_id: int
     target_name: str = ""
-    camera_name: Optional[str] = None
-    telescope_name: Optional[str] = None
-    date_obs: Optional[datetime] = None
+    camera_name: str | None = None
+    telescope_name: str | None = None
+    date_obs: datetime | None = None
     group_key: str
     status: str
     total_exposure_s: float
@@ -132,25 +136,25 @@ class SessionSchema(BaseModel):
 class FrameSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
-    session_id: Optional[int]
+    session_id: int | None
     filename: str
     filepath: str
     frame_type: str
     object_name: str
     filter_name: str
-    exposure: Optional[float]
-    gain: Optional[int]
-    ccd_temp: Optional[float]
+    exposure: float | None
+    gain: int | None
+    ccd_temp: float | None
     binning: int
-    date_obs: Optional[datetime]
+    date_obs: datetime | None
 
 
 class CameraSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
-    short_name: Optional[str]
-    pixel_size_um: Optional[float]
+    short_name: str | None
+    pixel_size_um: float | None
     frame_count: int = 0
     total_exposure_h: float = 0
 
@@ -159,8 +163,8 @@ class TelescopeSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
-    short_name: Optional[str]
-    focal_length_mm: Optional[float]
+    short_name: str | None
+    focal_length_mm: float | None
     frame_count: int = 0
     total_exposure_h: float = 0
 
@@ -168,12 +172,12 @@ class TelescopeSchema(BaseModel):
 class CalibrationFileSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
-    camera_id: Optional[int]
+    camera_id: int | None
     cal_type: str
-    exposure_s: Optional[float]
-    gain: Optional[int]
+    exposure_s: float | None
+    gain: int | None
     binning: int
-    ccd_temp: Optional[float]
+    ccd_temp: float | None
     filepath: str
     filename: str
 
@@ -181,6 +185,7 @@ class CalibrationFileSchema(BaseModel):
 # ---------------------------------------------------------------------------
 # Paginated response wrappers
 # ---------------------------------------------------------------------------
+
 
 class PaginatedResponse(BaseModel):
     total: int
@@ -213,6 +218,7 @@ class TelescopeListResponse(PaginatedResponse):
 # Scan API
 # ---------------------------------------------------------------------------
 
+
 class ScanRequest(BaseModel):
     path: str
     recursive: bool = True
@@ -233,7 +239,9 @@ def search_all(
     with SessionLocal() as session:
         # Search frames via FTS5
         fts_results = (
-            session.query(Frame.id, Frame.object_name, Frame.filename, Frame.frame_type, Frame.date_obs)
+            session.query(
+                Frame.id, Frame.object_name, Frame.filename, Frame.frame_type, Frame.date_obs
+            )
             .filter(
                 text("frames_fts MATCH :q"),
             )
@@ -252,7 +260,9 @@ def search_all(
 
         # Search sessions by target name
         session_results = (
-            session.query(ObsSession.id, ObsSession.group_key, ObsSession.date_obs, ObsSession.frame_count)
+            session.query(
+                ObsSession.id, ObsSession.group_key, ObsSession.date_obs, ObsSession.frame_count
+            )
             .join(Target, Target.id == ObsSession.target_id)
             .filter(Target.name.ilike(f"%{q}%"))
             .limit(limit)
@@ -260,13 +270,25 @@ def search_all(
         )
 
         return {
-            "targets": [{"id": t.id, "name": t.name, "type": t.object_type} for t in target_results],
+            "targets": [
+                {"id": t.id, "name": t.name, "type": t.object_type} for t in target_results
+            ],
             "sessions": [
-                {"id": s.id, "group_key": s.group_key, "date_obs": str(s.date_obs) if s.date_obs else None, "frame_count": s.frame_count}
+                {
+                    "id": s.id,
+                    "group_key": s.group_key,
+                    "date_obs": str(s.date_obs) if s.date_obs else None,
+                    "frame_count": s.frame_count,
+                }
                 for s in session_results
             ],
             "frames": [
-                {"id": f.id, "object_name": f.object_name, "filename": f.filename, "frame_type": f.frame_type}
+                {
+                    "id": f.id,
+                    "object_name": f.object_name,
+                    "filename": f.filename,
+                    "frame_type": f.frame_type,
+                }
                 for f in fts_results
             ],
         }
@@ -298,7 +320,9 @@ def start_scan(request: ScanRequest):
         _scan_state["phase"] = "scanning"
         _scan_state["error"] = None
 
-    thread = threading.Thread(target=_run_scan_task, args=(resolved, request.recursive), daemon=True)
+    thread = threading.Thread(
+        target=_run_scan_task, args=(resolved, request.recursive), daemon=True
+    )
     thread.start()
 
     return {"status": "started", "path": str(resolved)}
@@ -315,6 +339,7 @@ def scan_status():
 # Dashboard / Aggregation endpoints
 # ---------------------------------------------------------------------------
 
+
 @app.get("/api/v1/dashboard")
 def get_dashboard():
     """Aggregated dashboard data: totals, top targets, recent sessions."""
@@ -328,9 +353,10 @@ def get_dashboard():
         # Top 10 targets by exposure
         top_targets = (
             session.query(
-                Target.id, Target.name,
+                Target.id,
+                Target.name,
                 sa_func.sum(ObsSession.total_exposure_h).label("total_h"),
-                sa_func.count(ObsSession.id).label("session_count")
+                sa_func.count(ObsSession.id).label("session_count"),
             )
             .join(ObsSession, ObsSession.target_id == Target.id)
             .group_by(Target.id, Target.name)
@@ -342,12 +368,15 @@ def get_dashboard():
         # Recent 10 sessions
         recent = (
             session.query(
-                ObsSession.id, ObsSession.target_id, ObsSession.date_obs,
-                ObsSession.total_exposure_h, ObsSession.frame_count,
-                Target.name.label("target_name")
+                ObsSession.id,
+                ObsSession.target_id,
+                ObsSession.date_obs,
+                ObsSession.total_exposure_h,
+                ObsSession.frame_count,
+                Target.name.label("target_name"),
             )
             .join(Target, Target.id == ObsSession.target_id)
-            .filter(ObsSession.date_obs != None)
+            .filter(ObsSession.date_obs is not None)
             .order_by(ObsSession.date_obs.desc())
             .limit(10)
             .all()
@@ -356,9 +385,12 @@ def get_dashboard():
         # Camera usage stats
         camera_stats = (
             session.query(
-                Camera.id, Camera.name, Camera.short_name, Camera.pixel_size_um,
+                Camera.id,
+                Camera.name,
+                Camera.short_name,
+                Camera.pixel_size_um,
                 sa_func.count(Frame.id).label("frame_count"),
-                sa_func.coalesce(sa_func.sum(Frame.exposure), 0).label("total_s")
+                sa_func.coalesce(sa_func.sum(Frame.exposure), 0).label("total_s"),
             )
             .outerjoin(ObsSession, ObsSession.camera_id == Camera.id)
             .outerjoin(Frame, Frame.session_id == ObsSession.id)
@@ -373,18 +405,33 @@ def get_dashboard():
             "total_sessions": total_sessions,
             "total_targets": total_targets,
             "top_targets": [
-                {"id": t.id, "name": t.name, "total_exposure_h": round(t.total_h, 1), "session_count": t.session_count}
+                {
+                    "id": t.id,
+                    "name": t.name,
+                    "total_exposure_h": round(t.total_h, 1),
+                    "session_count": t.session_count,
+                }
                 for t in top_targets
             ],
             "recent_sessions": [
                 {
-                    "id": s.id, "target_id": s.target_id, "target_name": s.target_name,
-                    "date_obs": s.date_obs, "total_exposure_h": round(s.total_exposure_h, 1), "frame_count": s.frame_count
+                    "id": s.id,
+                    "target_id": s.target_id,
+                    "target_name": s.target_name,
+                    "date_obs": s.date_obs,
+                    "total_exposure_h": round(s.total_exposure_h, 1),
+                    "frame_count": s.frame_count,
                 }
                 for s in recent
             ],
             "cameras": [
-                {"id": c.id, "name": c.name, "short_name": c.short_name, "frame_count": c.frame_count, "total_exposure_h": round(c.total_s / 3600, 1)}
+                {
+                    "id": c.id,
+                    "name": c.name,
+                    "short_name": c.short_name,
+                    "frame_count": c.frame_count,
+                    "total_exposure_h": round(c.total_s / 3600, 1),
+                }
                 for c in camera_stats
             ],
         }
@@ -394,11 +441,14 @@ def get_dashboard():
 # Targets
 # ---------------------------------------------------------------------------
 
+
 @app.get("/api/v1/targets", response_model=TargetListResponse)
 def list_targets(
-    search: Optional[str] = Query(None, description="Search targets by name"),
-    object_type: Optional[str] = Query(None, description="Filter by object type (e.g. Galaxy, Nebula)"),
-    constellation: Optional[str] = Query(None, description="Filter by constellation"),
+    search: str | None = Query(None, description="Search targets by name"),
+    object_type: str | None = Query(
+        None, description="Filter by object type (e.g. Galaxy, Nebula)"
+    ),
+    constellation: str | None = Query(None, description="Filter by constellation"),
     sort_by: str = Query("name"),
     sort_order: str = Query("asc"),
     page: int = Query(1, ge=1),
@@ -407,8 +457,12 @@ def list_targets(
     engine, SessionLocal = get_session_local()
     with SessionLocal() as session:
         q = session.query(
-            Target.id, Target.name, Target.object_type, Target.constellation,
-            Target.ra_deg, Target.dec_deg,
+            Target.id,
+            Target.name,
+            Target.object_type,
+            Target.constellation,
+            Target.ra_deg,
+            Target.dec_deg,
             sa_func.count(ObsSession.id).label("session_count"),
             sa_func.coalesce(sa_func.sum(ObsSession.total_exposure_h), 0).label("total_h"),
         ).outerjoin(ObsSession, ObsSession.target_id == Target.id)
@@ -421,13 +475,26 @@ def list_targets(
             q = q.filter(Target.constellation == constellation)
 
         # Group by target
-        q = q.group_by(Target.id, Target.name, Target.object_type, Target.constellation, Target.ra_deg, Target.dec_deg)
+        q = q.group_by(
+            Target.id,
+            Target.name,
+            Target.object_type,
+            Target.constellation,
+            Target.ra_deg,
+            Target.dec_deg,
+        )
 
         total = q.count()
         pages = (total + page_size - 1) // page_size
 
         if sort_by in ("name", "object_type", "constellation", "total_h", "session_count"):
-            col = getattr(Target, sort_by, Target.name) if sort_by not in ("total_h", "session_count") else sa_func.coalesce(sa_func.sum(ObsSession.total_exposure_h), 0) if sort_by == "total_h" else sa_func.count(ObsSession.id)
+            col = (
+                getattr(Target, sort_by, Target.name)
+                if sort_by not in ("total_h", "session_count")
+                else sa_func.coalesce(sa_func.sum(ObsSession.total_exposure_h), 0)
+                if sort_by == "total_h"
+                else sa_func.count(ObsSession.id)
+            )
             order_col = col.desc() if sort_order == "desc" else col.asc()
         else:
             order_col = Target.name.asc()
@@ -436,14 +503,21 @@ def list_targets(
 
         items = [
             TargetSchema(
-                id=r.id, name=r.name, object_type=r.object_type, constellation=r.constellation,
-                ra_deg=r.ra_deg, dec_deg=r.dec_deg, session_count=r.session_count,
+                id=r.id,
+                name=r.name,
+                object_type=r.object_type,
+                constellation=r.constellation,
+                ra_deg=r.ra_deg,
+                dec_deg=r.dec_deg,
+                session_count=r.session_count,
                 total_exposure_h=round(r.total_h, 1),
             )
             for r in q.all()
         ]
 
-        return TargetListResponse(total=total, page=page, page_size=page_size, pages=pages, items=items)
+        return TargetListResponse(
+            total=total, page=page, page_size=page_size, pages=pages, items=items
+        )
 
 
 @app.get("/api/v1/targets/types")
@@ -451,8 +525,22 @@ def list_target_types():
     """Get distinct object types and constellations for filter dropdowns."""
     engine, SessionLocal = get_session_local()
     with SessionLocal() as session:
-        types = [row[0] for row in session.query(Target.object_type).distinct().filter(Target.object_type != None).order_by(Target.object_type).all()]
-        constellations = [row[0] for row in session.query(Target.constellation).distinct().filter(Target.constellation != None).order_by(Target.constellation).all()]
+        types = [
+            row[0]
+            for row in session.query(Target.object_type)
+            .distinct()
+            .filter(Target.object_type is not None)
+            .order_by(Target.object_type)
+            .all()
+        ]
+        constellations = [
+            row[0]
+            for row in session.query(Target.constellation)
+            .distinct()
+            .filter(Target.constellation is not None)
+            .order_by(Target.constellation)
+            .all()
+        ]
         return {"object_types": types, "constellations": constellations}
 
 
@@ -463,19 +551,33 @@ def get_target(target_id: int):
         target = session.query(Target).get(target_id)
         if not target:
             raise HTTPException(status_code=404, detail="Target not found")
-        session_count = session.query(sa_func.count(ObsSession.id)).filter(ObsSession.target_id == target_id).scalar()
-        total_h = session.query(sa_func.sum(ObsSession.total_exposure_h)).filter(ObsSession.target_id == target_id).scalar() or 0
+        session_count = (
+            session.query(sa_func.count(ObsSession.id))
+            .filter(ObsSession.target_id == target_id)
+            .scalar()
+        )
+        total_h = (
+            session.query(sa_func.sum(ObsSession.total_exposure_h))
+            .filter(ObsSession.target_id == target_id)
+            .scalar()
+            or 0
+        )
         return TargetSchema(
-            id=target.id, name=target.name, object_type=target.object_type,
-            constellation=target.constellation, ra_deg=target.ra_deg, dec_deg=target.dec_deg,
-            session_count=session_count, total_exposure_h=round(total_h, 1),
+            id=target.id,
+            name=target.name,
+            object_type=target.object_type,
+            constellation=target.constellation,
+            ra_deg=target.ra_deg,
+            dec_deg=target.dec_deg,
+            session_count=session_count,
+            total_exposure_h=round(total_h, 1),
         )
 
 
 @app.get("/api/v1/targets/{target_id}/sessions", response_model=SessionListResponse)
 def get_target_sessions(
     target_id: int,
-    camera_id: Optional[int] = Query(None),
+    camera_id: int | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
 ):
@@ -487,9 +589,13 @@ def get_target_sessions(
 
         q = (
             session.query(
-                ObsSession.id, ObsSession.target_id, ObsSession.date_obs,
-                ObsSession.group_key, ObsSession.status,
-                ObsSession.total_exposure_s, ObsSession.total_exposure_h,
+                ObsSession.id,
+                ObsSession.target_id,
+                ObsSession.date_obs,
+                ObsSession.group_key,
+                ObsSession.status,
+                ObsSession.total_exposure_s,
+                ObsSession.total_exposure_h,
                 ObsSession.frame_count,
                 Camera.name.label("camera_name"),
                 Telescope.name.label("telescope_name"),
@@ -506,30 +612,42 @@ def get_target_sessions(
 
         items = [
             SessionSchema(
-                id=r.id, target_id=r.target_id, target_name=target.name,
-                camera_name=r.camera_name, telescope_name=r.telescope_name,
-                date_obs=r.date_obs, group_key=r.group_key, status=r.status,
-                total_exposure_s=r.total_exposure_s, total_exposure_h=round(r.total_exposure_h, 2),
+                id=r.id,
+                target_id=r.target_id,
+                target_name=target.name,
+                camera_name=r.camera_name,
+                telescope_name=r.telescope_name,
+                date_obs=r.date_obs,
+                group_key=r.group_key,
+                status=r.status,
+                total_exposure_s=r.total_exposure_s,
+                total_exposure_h=round(r.total_exposure_h, 2),
                 frame_count=r.frame_count,
             )
-            for r in q.order_by(ObsSession.date_obs.desc()).offset((page - 1) * page_size).limit(page_size).all()
+            for r in q.order_by(ObsSession.date_obs.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .all()
         ]
 
-        return SessionListResponse(total=total, page=page, page_size=page_size, pages=pages, items=items)
+        return SessionListResponse(
+            total=total, page=page, page_size=page_size, pages=pages, items=items
+        )
 
 
 # ---------------------------------------------------------------------------
 # Sessions
 # ---------------------------------------------------------------------------
 
+
 @app.get("/api/v1/sessions", response_model=SessionListResponse)
 def list_sessions(
-    target_id: Optional[int] = Query(None),
-    camera_id: Optional[int] = Query(None),
-    telescope_id: Optional[int] = Query(None),
-    status: Optional[str] = Query(None),
-    date_from: Optional[str] = Query(None, description="Start date YYYY-MM-DD"),
-    date_to: Optional[str] = Query(None, description="End date YYYY-MM-DD"),
+    target_id: int | None = Query(None),
+    camera_id: int | None = Query(None),
+    telescope_id: int | None = Query(None),
+    status: str | None = Query(None),
+    date_from: str | None = Query(None, description="Start date YYYY-MM-DD"),
+    date_to: str | None = Query(None, description="End date YYYY-MM-DD"),
     sort_by: str = Query("date_obs"),
     sort_order: str = Query("desc"),
     page: int = Query(1, ge=1),
@@ -539,9 +657,13 @@ def list_sessions(
     with SessionLocal() as session:
         q = (
             session.query(
-                ObsSession.id, ObsSession.target_id, ObsSession.date_obs,
-                ObsSession.group_key, ObsSession.status,
-                ObsSession.total_exposure_s, ObsSession.total_exposure_h,
+                ObsSession.id,
+                ObsSession.target_id,
+                ObsSession.date_obs,
+                ObsSession.group_key,
+                ObsSession.status,
+                ObsSession.total_exposure_s,
+                ObsSession.total_exposure_h,
                 ObsSession.frame_count,
                 Target.name.label("target_name"),
                 Camera.name.label("camera_name"),
@@ -572,16 +694,24 @@ def list_sessions(
 
         items = [
             SessionSchema(
-                id=r.id, target_id=r.target_id, target_name=r.target_name,
-                camera_name=r.camera_name, telescope_name=r.telescope_name,
-                date_obs=r.date_obs, group_key=r.group_key, status=r.status,
-                total_exposure_s=r.total_exposure_s, total_exposure_h=round(r.total_exposure_h, 2),
+                id=r.id,
+                target_id=r.target_id,
+                target_name=r.target_name,
+                camera_name=r.camera_name,
+                telescope_name=r.telescope_name,
+                date_obs=r.date_obs,
+                group_key=r.group_key,
+                status=r.status,
+                total_exposure_s=r.total_exposure_s,
+                total_exposure_h=round(r.total_exposure_h, 2),
                 frame_count=r.frame_count,
             )
             for r in q.order_by(order_col).offset((page - 1) * page_size).limit(page_size).all()
         ]
 
-        return SessionListResponse(total=total, page=page, page_size=page_size, pages=pages, items=items)
+        return SessionListResponse(
+            total=total, page=page, page_size=page_size, pages=pages, items=items
+        )
 
 
 @app.get("/api/v1/sessions/{session_id}", response_model=SessionSchema)
@@ -590,9 +720,13 @@ def get_session(session_id: int):
     with SessionLocal() as session:
         obs = (
             session.query(
-                ObsSession.id, ObsSession.target_id, ObsSession.date_obs,
-                ObsSession.group_key, ObsSession.status,
-                ObsSession.total_exposure_s, ObsSession.total_exposure_h,
+                ObsSession.id,
+                ObsSession.target_id,
+                ObsSession.date_obs,
+                ObsSession.group_key,
+                ObsSession.status,
+                ObsSession.total_exposure_s,
+                ObsSession.total_exposure_h,
                 ObsSession.frame_count,
                 Target.name.label("target_name"),
                 Camera.name.label("camera_name"),
@@ -607,10 +741,16 @@ def get_session(session_id: int):
         if not obs:
             raise HTTPException(status_code=404, detail="Session not found")
         return SessionSchema(
-            id=obs.id, target_id=obs.target_id, target_name=obs.target_name,
-            camera_name=obs.camera_name, telescope_name=obs.telescope_name,
-            date_obs=obs.date_obs, group_key=obs.group_key, status=obs.status,
-            total_exposure_s=obs.total_exposure_s, total_exposure_h=round(obs.total_exposure_h, 2),
+            id=obs.id,
+            target_id=obs.target_id,
+            target_name=obs.target_name,
+            camera_name=obs.camera_name,
+            telescope_name=obs.telescope_name,
+            date_obs=obs.date_obs,
+            group_key=obs.group_key,
+            status=obs.status,
+            total_exposure_s=obs.total_exposure_s,
+            total_exposure_h=round(obs.total_exposure_h, 2),
             frame_count=obs.frame_count,
         )
 
@@ -653,19 +793,26 @@ def get_session_stats(session_id: int):
         return {
             "frame_type_counts": {row[0] or "UNKNOWN": row[1] for row in type_stats},
             "exposure_per_filter": [
-                {"filter": r.filter_name or "UNKNOWN", "frames": r.frame_count, "total_s": r.total_s}
+                {
+                    "filter": r.filter_name or "UNKNOWN",
+                    "frames": r.frame_count,
+                    "total_s": r.total_s,
+                }
                 for r in filter_stats
             ],
         }
 
+
 @app.get("/api/v1/frames", response_model=FrameListResponse)
 def list_frames(
-    session_id: Optional[int] = Query(None),
-    object_name: Optional[str] = Query(None),
-    filter_name: Optional[str] = Query(None),
-    frame_type: Optional[str] = Query(None),
-    camera: Optional[str] = Query(None),
-    has_coordinates: Optional[bool] = Query(None, description="Filter by presence of RA/Dec coordinates"),
+    session_id: int | None = Query(None),
+    object_name: str | None = Query(None),
+    filter_name: str | None = Query(None),
+    frame_type: str | None = Query(None),
+    camera: str | None = Query(None),
+    has_coordinates: bool | None = Query(
+        None, description="Filter by presence of RA/Dec coordinates"
+    ),
     sort_by: str = Query("date_obs"),
     sort_order: str = Query("asc"),
     page: int = Query(1, ge=1),
@@ -685,9 +832,9 @@ def list_frames(
         if camera:
             q = q.filter(Frame.instrume.ilike(f"%{camera}%"))
         if has_coordinates is True:
-            q = q.filter(Frame.ra_deg != None, Frame.dec_deg != None)
+            q = q.filter(Frame.ra_deg is not None, Frame.dec_deg is not None)
         elif has_coordinates is False:
-            q = q.filter(Frame.ra_deg == None, Frame.dec_deg == None)
+            q = q.filter(Frame.ra_deg is None, Frame.dec_deg is None)
 
         total = q.count()
         pages = (total + page_size - 1) // page_size
@@ -700,7 +847,9 @@ def list_frames(
             for f in q.order_by(order_col).offset((page - 1) * page_size).limit(page_size).all()
         ]
 
-        return FrameListResponse(total=total, page=page, page_size=page_size, pages=pages, items=items)
+        return FrameListResponse(
+            total=total, page=page, page_size=page_size, pages=pages, items=items
+        )
 
 
 @app.get("/api/v1/frames/{frame_id}/thumbnail")
@@ -711,16 +860,17 @@ def get_frame_thumbnail(frame_id: int):
         frame = session.query(Frame).get(frame_id)
         if not frame:
             raise HTTPException(status_code=404, detail="Frame not found")
-        
+
         fp = Path(frame.filepath)
         if not fp.exists():
             raise HTTPException(status_code=404, detail="File not found on disk")
-        
+
         from stellashelf.scanner import generate_thumbnail
+
         thumb_bytes = generate_thumbnail(fp)
         if thumb_bytes is None:
             raise HTTPException(status_code=500, detail="Failed to generate thumbnail")
-        
+
         return Response(content=thumb_bytes, media_type="image/jpeg")
 
 
@@ -732,7 +882,7 @@ def get_target_thumbnails(target_id: int, limit: int = Query(6, ge=1, le=20)):
         target = session.query(Target).get(target_id)
         if not target:
             raise HTTPException(status_code=404, detail="Target not found")
-        
+
         recent_frames = (
             session.query(Frame)
             .filter(Frame.object_name.ilike(f"%{target.name}%"), Frame.frame_type == "LIGHT")
@@ -740,36 +890,38 @@ def get_target_thumbnails(target_id: int, limit: int = Query(6, ge=1, le=20)):
             .limit(limit)
             .all()
         )
-        
+
         results = []
         for f in recent_frames:
             fp = Path(f.filepath)
             thumb_url = None
             if fp.exists():
                 from stellashelf.scanner import generate_thumbnail
+
                 thumb_bytes = generate_thumbnail(fp)
                 if thumb_bytes:
                     import base64
+
                     thumb_url = f"data:image/jpeg;base64,{base64.b64encode(thumb_bytes).decode()}"
-            
-            results.append({
-                "id": f.id,
-                "filename": f.filename,
-                "filter_name": f.filter_name,
-                "exposure": f.exposure,
-                "date_obs": str(f.date_obs) if f.date_obs else None,
-                "thumbnail": thumb_url,
-            })
-        
+
+            results.append(
+                {
+                    "id": f.id,
+                    "filename": f.filename,
+                    "filter_name": f.filter_name,
+                    "exposure": f.exposure,
+                    "date_obs": str(f.date_obs) if f.date_obs else None,
+                    "thumbnail": thumb_url,
+                }
+            )
+
         return results
-
-
-
 
 
 # ---------------------------------------------------------------------------
 # Equipment
 # ---------------------------------------------------------------------------
+
 
 @app.get("/api/v1/cameras", response_model=list[CameraSchema])
 def list_cameras():
@@ -777,7 +929,10 @@ def list_cameras():
     with SessionLocal() as session:
         results = (
             session.query(
-                Camera.id, Camera.name, Camera.short_name, Camera.pixel_size_um,
+                Camera.id,
+                Camera.name,
+                Camera.short_name,
+                Camera.pixel_size_um,
                 sa_func.count(Frame.id).label("frame_count"),
                 sa_func.coalesce(sa_func.sum(Frame.exposure), 0).label("total_s"),
             )
@@ -789,8 +944,12 @@ def list_cameras():
         )
         return [
             CameraSchema(
-                id=r.id, name=r.name, short_name=r.short_name, pixel_size_um=r.pixel_size_um,
-                frame_count=r.frame_count, total_exposure_h=round(r.total_s / 3600, 1),
+                id=r.id,
+                name=r.name,
+                short_name=r.short_name,
+                pixel_size_um=r.pixel_size_um,
+                frame_count=r.frame_count,
+                total_exposure_h=round(r.total_s / 3600, 1),
             )
             for r in results
         ]
@@ -802,7 +961,10 @@ def list_telescopes():
     with SessionLocal() as session:
         results = (
             session.query(
-                Telescope.id, Telescope.name, Telescope.short_name, Telescope.focal_length_mm,
+                Telescope.id,
+                Telescope.name,
+                Telescope.short_name,
+                Telescope.focal_length_mm,
                 sa_func.count(Frame.id).label("frame_count"),
                 sa_func.coalesce(sa_func.sum(Frame.exposure), 0).label("total_s"),
             )
@@ -814,8 +976,12 @@ def list_telescopes():
         )
         return [
             TelescopeSchema(
-                id=r.id, name=r.name, short_name=r.short_name, focal_length_mm=r.focal_length_mm,
-                frame_count=r.frame_count, total_exposure_h=round(r.total_s / 3600, 1),
+                id=r.id,
+                name=r.name,
+                short_name=r.short_name,
+                focal_length_mm=r.focal_length_mm,
+                frame_count=r.frame_count,
+                total_exposure_h=round(r.total_s / 3600, 1),
             )
             for r in results
         ]
@@ -832,7 +998,7 @@ def list_filters():
                 sa_func.count(Frame.id).label("frame_count"),
                 sa_func.coalesce(sa_func.sum(Frame.exposure), 0).label("total_s"),
             )
-            .filter(Frame.filter_name != None, Frame.filter_name != "")
+            .filter(Frame.filter_name is not None, Frame.filter_name != "")
             .group_by(Frame.filter_name)
             .order_by(sa_func.count(Frame.id).desc())
             .all()
@@ -850,6 +1016,7 @@ def list_filters():
 # ---------------------------------------------------------------------------
 # Statistics
 # ---------------------------------------------------------------------------
+
 
 @app.get("/api/v1/stats")
 def get_stats():
@@ -874,8 +1041,8 @@ def get_stats():
 
 class SettingSchema(BaseModel):
     key: str
-    value: Optional[str]
-    description: Optional[str]
+    value: str | None
+    description: str | None
 
 
 @app.get("/api/v1/settings", response_model=list[SettingSchema])
@@ -911,52 +1078,46 @@ def update_settings(settings: list[SettingSchema]):
 @app.post("/api/v1/platesolve")
 def run_platesolve():
     """Run ASTAP platesolving on all frames without RA/Dec coordinates."""
-    from stellashelf.scanner import platesolve_frame
     from stellashelf.db import Setting
-    
+    from stellashelf.scanner import platesolve_frame
+
     engine, SessionLocal = get_session_local()
-    
+
     # Get ASTAP binary path from settings
     astap_binary = "astap"
     with SessionLocal() as sess:
         setting = sess.query(Setting).filter(Setting.key == "astap_binary").first()
         if setting and setting.value:
             astap_binary = setting.value
-    
+
     solved = 0
     failed = 0
-    
+
     with SessionLocal() as sess:
         unplated = (
-            sess.query(Frame)
-            .filter(Frame.ra_deg == None, Frame.dec_deg == None)
-            .limit(50)
-            .all()
+            sess.query(Frame).filter(Frame.ra_deg is None, Frame.dec_deg is None).limit(50).all()
         )
-        
+
         for frame in unplated:
             fp = Path(frame.filepath)
             if not fp.exists():
                 continue
             result = platesolve_frame(fp, astap_binary)
             if result:
-                frame.ra_deg = result['ra_deg']
-                frame.dec_deg = result['dec_deg']
+                frame.ra_deg = result["ra_deg"]
+                frame.dec_deg = result["dec_deg"]
                 solved += 1
             else:
                 failed += 1
-        
+
         sess.commit()
-    
+
     return {
         "status": "ok",
         "solved": solved,
         "failed": failed,
         "remaining": len(unplated) - solved - failed,
     }
-
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -974,5 +1135,6 @@ if FRONTEND_DIR.exists():
         # Serve index.html for all non-API, non-asset paths (SPA routing)
         if path.startswith("api/") or path.startswith("assets/"):
             from fastapi import HTTPException
+
             raise HTTPException(status_code=404)
         return (FRONTEND_DIR / "index.html").read_text()

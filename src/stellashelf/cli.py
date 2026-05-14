@@ -6,9 +6,9 @@ from pathlib import Path
 import click
 from rich.console import Console
 from rich.table import Table
-from sqlalchemy import text
 
-from stellashelf.db import init_db, Session as ObsSession, Target, Frame, Camera, Telescope, CalibrationFile
+from stellashelf.db import CalibrationFile, Camera, Frame, Target, Telescope, init_db
+from stellashelf.db import Session as ObsSession
 from stellashelf.importer import ImporterService
 
 console = Console()
@@ -41,6 +41,7 @@ def scan(path: str, db: str, recursive: bool, dry_run: bool, verbose: bool):
 
     if dry_run:
         from stellashelf.scanner import scan_directory
+
         frames = scan_directory(root, recursive=recursive, dry_run=True, verbose=verbose)
         console.print("\n[yellow]Dry run — no data written to database.[/yellow]")
         _print_scan_summary(frames)
@@ -50,7 +51,10 @@ def scan(path: str, db: str, recursive: bool, dry_run: bool, verbose: bool):
     importer = ImporterService(db_path)
     stats = importer.import_from_path(root, recursive=recursive)
 
-    console.print(f"\n[green]✓ Imported {stats['imported']} frames ({stats['skipped']} duplicates skipped)[/green]")
+    console.print(
+        f"\n[green]✓ Imported {stats['imported']} frames"
+        f" ({stats['skipped']} duplicates skipped)[/green]"
+    )
     console.print(f"  [cyan]Calibration files:[/cyan] {stats['calibration_files']}")
 
 

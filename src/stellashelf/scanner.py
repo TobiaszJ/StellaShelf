@@ -10,13 +10,12 @@ Supports:
 - XISF files (skipped with warning — parser not yet implemented)
 """
 
-import hashlib
 import io
 import re
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Iterator, Optional
 
 import numpy as np
 from astropy.io import fits
@@ -30,7 +29,8 @@ console = Console()
 # Coordinate Parsing
 # ---------------------------------------------------------------------------
 
-def _parse_hms_to_degrees(hms_str: str) -> Optional[float]:
+
+def _parse_hms_to_degrees(hms_str: str) -> float | None:
     """Parse HMS (HH MM SS.SS) string to degrees. 1h = 15deg."""
     try:
         parts = re.split(r"[\s:]+", hms_str.strip())
@@ -45,7 +45,7 @@ def _parse_hms_to_degrees(hms_str: str) -> Optional[float]:
     return None
 
 
-def _parse_dms_to_degrees(dms_str: str) -> Optional[float]:
+def _parse_dms_to_degrees(dms_str: str) -> float | None:
     """Parse DMS (+/-DD MM SS.SS) string to decimal degrees."""
     try:
         parts = re.split(r"[\s:]+", dms_str.strip())
@@ -66,6 +66,7 @@ def _parse_dms_to_degrees(dms_str: str) -> Optional[float]:
 # Data classes for scanned metadata
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ScannedFrame:
     """Metadata extracted from a single FITS file."""
@@ -78,18 +79,18 @@ class ScannedFrame:
     instrume: str = ""
     telescop: str = ""
     filter_name: str = ""
-    exposure: Optional[float] = None
-    gain: Optional[int] = None
-    ccd_temp: Optional[float] = None
+    exposure: float | None = None
+    gain: int | None = None
+    ccd_temp: float | None = None
     binning: int = 1
-    date_obs: Optional[datetime] = None
-    date_local: Optional[datetime] = None
-    width: Optional[int] = None
-    height: Optional[int] = None
-    pixel_size_um: Optional[float] = None
-    focal_length_mm: Optional[float] = None
-    ra_deg: Optional[float] = None
-    dec_deg: Optional[float] = None
+    date_obs: datetime | None = None
+    date_local: datetime | None = None
+    width: int | None = None
+    height: int | None = None
+    pixel_size_um: float | None = None
+    focal_length_mm: float | None = None
+    ra_deg: float | None = None
+    dec_deg: float | None = None
     site_name: str = ""
     observer: str = ""
     creator: str = ""
@@ -130,11 +131,31 @@ def _extract_header(hdu_list: fits.HDUList) -> dict:
 
     result = {}
     keys_to_extract = [
-        "OBJECT", "INSTRUME", "TELESCOP", "FILTER", "EXPOSURE",
-        "GAIN", "CCD-TEMP", "DATE-OBS", "DATE-LOC", "XBINNING",
-        "YBINNING", "NAXIS1", "NAXIS2", "IMAGETYP", "FOCALLEN",
-        "XPIXSZ", "YPIXSZ", "RA", "DEC", "CRVAL1", "CRVAL2",
-        "SITENAME", "OBSERVER", "CREATOR", "BAYERPAT",
+        "OBJECT",
+        "INSTRUME",
+        "TELESCOP",
+        "FILTER",
+        "EXPOSURE",
+        "GAIN",
+        "CCD-TEMP",
+        "DATE-OBS",
+        "DATE-LOC",
+        "XBINNING",
+        "YBINNING",
+        "NAXIS1",
+        "NAXIS2",
+        "IMAGETYP",
+        "FOCALLEN",
+        "XPIXSZ",
+        "YPIXSZ",
+        "RA",
+        "DEC",
+        "CRVAL1",
+        "CRVAL2",
+        "SITENAME",
+        "OBSERVER",
+        "CREATOR",
+        "BAYERPAT",
     ]
 
     for key in keys_to_extract:
@@ -149,10 +170,20 @@ def _extract_header(hdu_list: fits.HDUList) -> dict:
 
 # Normalize IMAGETYP values from various capture software
 _FRAME_TYPE_MAP = {
-    "light": "LIGHT", "light frame": "LIGHT", "lightframe": "LIGHT",
-    "dark": "DARK", "dark frame": "DARK", "darkframe": "DARK",
-    "flat": "FLAT", "flat frame": "FLAT", "flatfield": "FLAT", "flat field": "FLAT",
-    "bias": "BIAS", "bias frame": "BIAS", "biasframe": "BIAS", "offset": "BIAS",
+    "light": "LIGHT",
+    "light frame": "LIGHT",
+    "lightframe": "LIGHT",
+    "dark": "DARK",
+    "dark frame": "DARK",
+    "darkframe": "DARK",
+    "flat": "FLAT",
+    "flat frame": "FLAT",
+    "flatfield": "FLAT",
+    "flat field": "FLAT",
+    "bias": "BIAS",
+    "bias frame": "BIAS",
+    "biasframe": "BIAS",
+    "offset": "BIAS",
     "skyflat": "FLAT",
 }
 
@@ -323,7 +354,7 @@ CALIB_PATTERN = re.compile(
 )
 
 
-def parse_filename(filepath: Path) -> Optional[dict]:
+def parse_filename(filepath: Path) -> dict | None:
     """Try to extract metadata from the filename as a fallback."""
     name = filepath.stem
 
@@ -380,7 +411,7 @@ def generate_group_key(frame: ScannedFrame) -> str:
     return f"{obj}|{date_str}|{inst}|{tel}|{filt}"
 
 
-def generate_thumbnail(filepath: Path, size: int = 200) -> Optional[bytes]:
+def generate_thumbnail(filepath: Path, size: int = 200) -> bytes | None:
     """..."""  # (existing function, unchanged)
     # ... existing code ...
     try:
@@ -391,79 +422,81 @@ def generate_thumbnail(filepath: Path, size: int = 200) -> Optional[bytes]:
                 if hdu.data is not None:
                     data = hdu.data
                     break
-            
+
             if data is None:
                 return None
-            
+
             # Convert to 2D if multi-dimensional
             if data.ndim > 2:
                 data = data[0] if data.shape[0] == 1 else np.mean(data, axis=0)
-            
+
             # Handle NaN/Inf
             data = np.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0)
-            
+
             # Normalize to 0-255 using percentiles for better contrast
             p_low, p_high = np.percentile(data, [5, 95])
             if p_high > p_low:
                 data = np.clip((data - p_low) / (p_high - p_low) * 255, 0, 255)
             else:
                 data = np.clip(data / (np.max(data) or 1) * 255, 0, 255)
-            
+
             data = data.astype(np.uint8)
-            
+
             # Resize
             from PIL import Image
-            img = Image.fromarray(data, mode='L')
+
+            img = Image.fromarray(data, mode="L")
             img.thumbnail((size, size), Image.LANCZOS)
-            
+
             buf = io.BytesIO()
-            img.save(buf, format='JPEG', quality=85)
+            img.save(buf, format="JPEG", quality=85)
             return buf.getvalue()
     except Exception:
         return None
 
 
-def platesolve_frame(filepath: Path, astap_binary: str = "astap") -> Optional[dict]:
+def platesolve_frame(filepath: Path, astap_binary: str = "astap") -> dict | None:
     """Run ASTAP CLI on a FITS file to extract RA/Dec coordinates.
-    
+
     Args:
         filepath: Path to the FITS file.
         astap_binary: Path to the ASTAP executable.
-    
+
     Returns:
         Dictionary with 'ra_deg' and 'dec_deg' on success, or None.
     """
     import subprocess
     import tempfile
-    import json
-    
+
     try:
         # ASTAP can output coordinates to a text file
-        with tempfile.NamedTemporaryFile(suffix='.txt', delete=False, mode='w+') as tmp:
+        with tempfile.NamedTemporaryFile(suffix=".txt", delete=False, mode="w+") as tmp:
             tmp_path = tmp.name
-        
+
         result = subprocess.run(
-            [astap_binary, '-f', str(filepath), '-o', tmp_path, '-r', '50'],
-            capture_output=True, text=True, timeout=120
+            [astap_binary, "-f", str(filepath), "-o", tmp_path, "-r", "50"],
+            capture_output=True,
+            text=True,
+            timeout=120,
         )
-        
+
         if result.returncode != 0:
             return None
-        
+
         # Parse the output for coordinates
         if Path(tmp_path).exists():
             content = Path(tmp_path).read_text()
             Path(tmp_path).unlink(missing_ok=True)
-            
-            ra_match = re.search(r'RA\s*=\s*([\d.]+)', content, re.IGNORECASE)
-            dec_match = re.search(r'DEC\s*=\s*([-\d.]+)', content, re.IGNORECASE)
-            
+
+            ra_match = re.search(r"RA\s*=\s*([\d.]+)", content, re.IGNORECASE)
+            dec_match = re.search(r"DEC\s*=\s*([-\d.]+)", content, re.IGNORECASE)
+
             if ra_match and dec_match:
                 return {
-                    'ra_deg': float(ra_match.group(1)),
-                    'dec_deg': float(dec_match.group(1)),
+                    "ra_deg": float(ra_match.group(1)),
+                    "dec_deg": float(dec_match.group(1)),
                 }
-        
+
         return None
     except Exception:
         return None
@@ -474,7 +507,7 @@ def scan_directory(
     recursive: bool = True,
     dry_run: bool = False,
     verbose: bool = False,
-    progress_callback: Optional[Callable[[int, int, Path], None]] = None,
+    progress_callback: Callable[[int, int, Path], None] | None = None,
 ) -> list[ScannedFrame]:
     """Scan a directory for FITS files and extract metadata."""
     frames: list[ScannedFrame] = []
@@ -494,7 +527,9 @@ def scan_directory(
     if not progress_callback:
         console.print(f"Found [cyan]{total}[/cyan] FITS files in {root}")
         if xisf_skipped:
-            console.print(f"[dim]Skipping {xisf_skipped} XISF files (parser not yet implemented)[/dim]")
+            console.print(
+                f"[dim]Skipping {xisf_skipped} XISF files (parser not yet implemented)[/dim]"
+            )
 
     if progress_callback:
         progress_callback(0, total, Path())
