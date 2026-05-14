@@ -847,5 +847,10 @@ if FRONTEND_DIR.exists():
     app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIR / "assets")), name="assets")
 
     @app.get("/", response_class=HTMLResponse)
-    async def index():
+    @app.get("/{path:path}", response_class=HTMLResponse)
+    async def index(path: str = ""):
+        # Serve index.html for all non-API, non-asset paths (SPA routing)
+        if path.startswith("api/") or path.startswith("assets/"):
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404)
         return (FRONTEND_DIR / "index.html").read_text()
