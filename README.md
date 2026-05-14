@@ -2,7 +2,7 @@
 
 **Astrophotography Digital Asset Management & Processing Hub**
 
-Open-source tool for cataloging, organizing, and managing deep-sky astrophotography image collections. Scans FITS/XISF headers, groups frames into observation sessions, and provides a web interface for browsing your astro archive.
+Open-source tool for cataloging, organizing, and managing deep-sky astrophotography image collections. Scans FITS/XISF headers, groups frames into observation sessions, and provides a modern Vue 3 web interface for browsing your astro archive.
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://opensource.org/licenses/AGPL-3.0)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
@@ -14,7 +14,7 @@ Open-source tool for cataloging, organizing, and managing deep-sky astrophotogra
 - **Automatic Session Grouping**: Groups frames by target + date + camera + telescope + filter
 - **Multi-Software Support**: Handles SGP-compressed FITS (HDU[1] headers), MaximDL, QHY, and other capture software
 - **SQLite + FTS5**: Serverless database with full-text search, no external dependencies
-- **Web Dashboard**: Browse targets, sessions, and equipment with pagination and filtering
+- **Vue 3 Web Dashboard**: Modern reactive UI with pagination, filtering, and ECharts visualizations
 - **REST API**: FastAPI backend with pagination, aggregation, and scan management
 - **Calibration File Detection**: Automatically identifies and separates BIAS, DARK, FLAT from light frames
 - **Coordinate Parsing**: Converts HMS/DMS strings to decimal degrees for old FITS files
@@ -60,11 +60,12 @@ stellashelf scan /path/to/files --dry-run    # Preview without importing
 src/stellashelf/
 ├── scanner.py      # FITS header extraction, session grouping
 ├── db.py           # SQLAlchemy models (Target, Session, Frame, Camera, Telescope)
+├── importer.py     # Centralized import pipeline (CLI & API)
 ├── cli.py          # Click CLI commands
-└── api.py          # FastAPI REST API + web frontend serving
+└── api.py          # FastAPI REST API + Vue 3 SPA serving
 
-frontend/
-└── index.html      # Single-page web dashboard (no build step)
+frontend-vue/
+└── src/            # Vue 3 + TypeScript + Vite + PrimeVue frontend
 ```
 
 ### Database Schema
@@ -114,6 +115,9 @@ pytest tests/ -v -k "integration"
 # Lint + type check
 ruff check src/
 mypy src/
+
+# Frontend development
+cd frontend-vue && npm run dev
 ```
 
 ## License
@@ -122,9 +126,10 @@ AGPL-3.0 — Network copyleft. If you run a modified version as a service, you m
 
 ## Roadmap
 
+See [docs/roadmap.md](docs/roadmap.md) for detailed development milestones.
+
 - [ ] ASTAP platesolving for frames missing coordinates
 - [ ] Siril `.sss` script generator for processing pipelines
-- [ ] Vue3/PrimeVue frontend reactivity
 - [ ] XISF file parsing
 - [ ] Quality metrics (FWHM, eccentricity) from Siril/Astap
 - [ ] Processing pipeline integration

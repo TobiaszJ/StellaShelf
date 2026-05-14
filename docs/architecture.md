@@ -133,3 +133,16 @@ Key headers live in the **first extension** (HDU[1]) when the file is gzip-compr
 - **Development**: Local on RK3588, hot-reload
 - **Production**: Docker on 192.168.1.100 (Kubuntu, AMD 5900X + RX 9070), data mounted via NFS
 - **Processing**: Siril runs on the workstation with GPU acceleration
+
+## Service Architecture
+
+```
+src/stellashelf/
+├── scanner.py      # FITS header extraction, session grouping
+├── db.py           # SQLAlchemy models (Target, Session, Frame, Camera, Telescope)
+├── importer.py     # Centralized import pipeline (CLI & API)
+├── cli.py          # Click CLI commands
+└── api.py          # FastAPI REST API + Vue 3 SPA serving
+```
+
+The `ImporterService` in `importer.py` centralizes all import logic, eliminating duplication between CLI and API. Both interfaces delegate to this service, ensuring consistent behavior and easier maintenance.

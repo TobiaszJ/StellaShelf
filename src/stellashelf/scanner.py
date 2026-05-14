@@ -15,17 +15,20 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Iterator
+from typing import Callable, Iterator, Optional
 
 from astropy.io import fits
 from rich.console import Console
 from rich.progress import Progress
 
+console = Console()
+
+
 # ---------------------------------------------------------------------------
-# Coordinate parsing
+# Coordinate Parsing
 # ---------------------------------------------------------------------------
 
-def _parse_hms_to_degrees(hms_str: str) -> float | None:
+def _parse_hms_to_degrees(hms_str: str) -> Optional[float]:
     """Parse HMS (HH MM SS.SS) string to degrees. 1h = 15deg."""
     try:
         parts = re.split(r"[\s:]+", hms_str.strip())
@@ -40,7 +43,7 @@ def _parse_hms_to_degrees(hms_str: str) -> float | None:
     return None
 
 
-def _parse_dms_to_degrees(dms_str: str) -> float | None:
+def _parse_dms_to_degrees(dms_str: str) -> Optional[float]:
     """Parse DMS (+/-DD MM SS.SS) string to decimal degrees."""
     try:
         parts = re.split(r"[\s:]+", dms_str.strip())
@@ -56,12 +59,10 @@ def _parse_dms_to_degrees(dms_str: str) -> float | None:
         pass
     return None
 
-console = Console()
 
 # ---------------------------------------------------------------------------
 # Data classes for scanned metadata
 # ---------------------------------------------------------------------------
-
 
 @dataclass
 class ScannedFrame:
@@ -75,18 +76,18 @@ class ScannedFrame:
     instrume: str = ""
     telescop: str = ""
     filter_name: str = ""
-    exposure: float | None = None
-    gain: int | None = None
-    ccd_temp: float | None = None
+    exposure: Optional[float] = None
+    gain: Optional[int] = None
+    ccd_temp: Optional[float] = None
     binning: int = 1
-    date_obs: datetime | None = None
-    date_local: datetime | None = None
-    width: int | None = None
-    height: int | None = None
-    pixel_size_um: float | None = None
-    focal_length_mm: float | None = None
-    ra_deg: float | None = None
-    dec_deg: float | None = None
+    date_obs: Optional[datetime] = None
+    date_local: Optional[datetime] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    pixel_size_um: Optional[float] = None
+    focal_length_mm: Optional[float] = None
+    ra_deg: Optional[float] = None
+    dec_deg: Optional[float] = None
     site_name: str = ""
     observer: str = ""
     creator: str = ""
@@ -98,21 +99,22 @@ class ScannedFrame:
 # FITS header extraction
 # ---------------------------------------------------------------------------
 
+_HEADER_ALIASES = {
+    "EXPOSURE": ["EXPTIME", "EXP_TIME"],
+    "CCD-TEMP": ["CCDTEMP", "TEMPERAT"],
+    "FILTER": ["FILTERS", "FILTNAME"],
+    "GAIN": ["EGAIN", "EMGAIN"],
+    "DATE-OBS": ["DATE_OBS", "DATEOBS"],
+    "INSTRUME": ["CAMERA", "CAMNAME"],
+}
+
 
 def _get_header_value(header: fits.Header, key: str, default=None):
     """Get a value from a FITS header, handling alternate key names."""
     value = header.get(key)
     if value is not None:
         return value
-    aliases = {
-        "EXPOSURE": ["EXPTIME", "EXP_TIME"],
-        "CCD-TEMP": ["CCDTEMP", "TEMPERAT"],
-        "FILTER": ["FILTERS", "FILTNAME"],
-        "GAIN": ["EGAIN", "EMGAIN"],
-        "DATE-OBS": ["DATE_OBS", "DATEOBS"],
-        "INSTRUME": ["CAMERA", "CAMNAME"],
-    }
-    for alias in aliases.get(key, []):
+    for alias in _HEADER_ALIASES.get(key, []):
         value = header.get(alias)
         if value is not None:
             return value
@@ -163,33 +165,27 @@ def _normalize_frame_type(raw: str) -> str:
 
 def _extract_object_from_filename(filename: str) -> str:
     """Try to extract object name from filename patterns like M42_Ha.fit, NGC7000_L_300s.fit."""
-    # Common patterns: M42, NGC7000, IC434, SH2-101, LDN1235, vdB123
-    # The key: match the catalog prefix BEFORE the first underscore
     stem = filename.split("_")[0] if "_" in filename else filename
-    # Remove file extension
     for ext in (".fit", ".fits", ".fit.gz", ".xisf"):
         if stem.lower().endswith(ext):
             stem = stem[: -len(ext)]
             break
 
-    # Try known catalog patterns
-    import re
     patterns = [
-        r"^(M\s*\d+[a-zA-Z]?)$",              # M42, M31-2, M 42
-        r"^(NGC\s*\d+[a-zA-Z]?)$",            # NGC7000, NGC 6992
-        r"^(IC\s*\d+[a-zA-Z]?)$",             # IC434, IC 1396
-        r"^(SH[A-Za-z]?[-_]?\d+)$",            # SH2-101, SH2_101
-        r"^(LDN\s*\d+)$",                     # LDN1235
-        r"^(vdB\s*\d+)$",                     # vdB123
-        r"^(B\s*\d+)$",                       # B137 (Barnard)
-        r"^(C\s*\d+)$",                       # C20 (Caldwell)
+        r"^(M\s*\d+[a-zA-Z]?)$",
+        r"^(NGC\s*\d+[a-zA-Z]?)$",
+        r"^(IC\s*\d+[a-zA-Z]?)$",
+        r"^(SH[A-Za-z]?[-_]?\d+)$",
+        r"^(LDN\s*\d+)$",
+        r"^(vdB\s*\d+)$",
+        r"^(B\s*\d+)$",
+        r"^(C\s*\d+)$",
     ]
     for pat in patterns:
         m = re.match(pat, stem, re.IGNORECASE)
         if m:
             return m.group(1).strip().upper()
 
-    # Fallback: if stem starts with letters+digits, return it
     m = re.match(r"^([A-Z]{1,5}\s*\d+[a-zA-Z0-9-]*)", stem, re.IGNORECASE)
     if m:
         return m.group(1).strip().upper()
@@ -218,27 +214,41 @@ def scan_fits_file(filepath: Path) -> ScannedFrame:
             frame.observer = str(header.get("OBSERVER", "")).strip()
             frame.creator = str(header.get("CREATOR", "")).strip()
 
-            # FIX #1: Actually use IMAGETYP from header
             raw_type = str(header.get("IMAGETYP", "")).strip()
             frame.frame_type = _normalize_frame_type(raw_type)
 
-            # Numeric fields
+            # Numeric fields with explicit validation
             exposure = header.get("EXPOSURE")
-            frame.exposure = float(exposure) if exposure is not None else None
+            if exposure is not None:
+                try:
+                    frame.exposure = float(exposure)
+                except (ValueError, TypeError):
+                    frame.errors.append(f"Invalid EXPOSURE value: {exposure}")
 
-            # Fix: QHY8L stores long exposures in milliseconds (header says 600000 for 600s)
-            # All QHY8L values >= 10000 are in ms and need to be divided by 1000
+            # Fix: QHY8L stores long exposures in milliseconds
             if frame.instrume == "QHY8L" and frame.exposure is not None and frame.exposure >= 10000:
                 frame.exposure /= 1000.0
 
             gain = header.get("GAIN")
-            frame.gain = int(gain) if gain is not None else None
+            if gain is not None:
+                try:
+                    frame.gain = int(gain)
+                except (ValueError, TypeError):
+                    frame.errors.append(f"Invalid GAIN value: {gain}")
 
             ccd_temp = header.get("CCD-TEMP")
-            frame.ccd_temp = float(ccd_temp) if ccd_temp is not None else None
+            if ccd_temp is not None:
+                try:
+                    frame.ccd_temp = float(ccd_temp)
+                except (ValueError, TypeError):
+                    frame.errors.append(f"Invalid CCD-TEMP value: {ccd_temp}")
 
             binning = header.get("XBINNING")
-            frame.binning = int(binning) if binning is not None else 1
+            if binning is not None:
+                try:
+                    frame.binning = int(binning)
+                except (ValueError, TypeError):
+                    frame.errors.append(f"Invalid XBINNING value: {binning}")
 
             frame.width = header.get("NAXIS1")
             frame.height = header.get("NAXIS2")
@@ -249,11 +259,22 @@ def scan_fits_file(filepath: Path) -> ScannedFrame:
             fl = header.get("FOCALLEN")
             frame.focal_length_mm = float(fl) if fl is not None else None
 
+            # Coordinate parsing
             ra = header.get("RA") or header.get("CRVAL1")
-            frame.ra_deg = float(ra) if ra is not None else None
-            dec = header.get("DEC") or header.get("CRVAL2")
-            frame.dec_deg = float(dec) if dec is not None else None
+            if ra is not None:
+                try:
+                    frame.ra_deg = float(ra)
+                except (ValueError, TypeError):
+                    frame.ra_deg = _parse_hms_to_degrees(str(ra))
 
+            dec = header.get("DEC") or header.get("CRVAL2")
+            if dec is not None:
+                try:
+                    frame.dec_deg = float(dec)
+                except (ValueError, TypeError):
+                    frame.dec_deg = _parse_dms_to_degrees(str(dec))
+
+            # Date parsing
             date_obs = header.get("DATE-OBS")
             if date_obs:
                 try:
@@ -266,7 +287,7 @@ def scan_fits_file(filepath: Path) -> ScannedFrame:
                 try:
                     frame.date_local = datetime.fromisoformat(str(date_local).strip())
                 except (ValueError, TypeError):
-                    pass
+                    frame.errors.append(f"Cannot parse DATE-LOC: {date_local}")
 
     except Exception as e:
         frame.errors.append(f"FITS read error: {e}")
@@ -300,7 +321,7 @@ CALIB_PATTERN = re.compile(
 )
 
 
-def parse_filename(filepath: Path) -> dict | None:
+def parse_filename(filepath: Path) -> Optional[dict]:
     """Try to extract metadata from the filename as a fallback."""
     name = filepath.stem
 
@@ -362,14 +383,9 @@ def scan_directory(
     recursive: bool = True,
     dry_run: bool = False,
     verbose: bool = False,
-    progress_callback: Callable[[int, int, Path], None] | None = None,
+    progress_callback: Optional[Callable[[int, int, Path], None]] = None,
 ) -> list[ScannedFrame]:
-    """Scan a directory for FITS files and extract metadata.
-
-    Args:
-        progress_callback: Optional callback invoked as (processed, total, current_file)
-                          after each file is scanned.
-    """
+    """Scan a directory for FITS files and extract metadata."""
     frames: list[ScannedFrame] = []
     errors: list[str] = []
     xisf_skipped = 0
@@ -416,7 +432,7 @@ def scan_directory(
                         if not frame.filter_name and "filter_name" in parsed:
                             frame.filter_name = parsed["filter_name"]
 
-                # FIX: If OBJECT is still empty, try to extract from filename
+                # If OBJECT is still empty, try to extract from filename
                 if not frame.object_name:
                     extracted = _extract_object_from_filename(frame.filename)
                     if extracted:

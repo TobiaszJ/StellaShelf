@@ -4,7 +4,6 @@ REST API for browsing astrophotography sessions, frames, and equipment.
 Supports pagination, filtering, and full-text search.
 """
 
-import os
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -15,9 +14,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import func as sa_func, text
+from sqlalchemy import func as sa_func
 
 from stellashelf.db import init_db, Target, Session as ObsSession, Frame, Camera, Telescope, CalibrationFile
+from stellashelf.importer import ImporterService
 
 DB_PATH = Path("~/stellashelf/stellashelf.db").expanduser().resolve()
 
@@ -25,7 +25,7 @@ DB_PATH = Path("~/stellashelf/stellashelf.db").expanduser().resolve()
 def get_session_local():
     """Initialize and return engine, SessionLocal."""
     if not DB_PATH.exists():
-        raise RuntimeError(f"Database not found at {DB_PATH}. Run \'stellashelf scan\' first.")
+        raise RuntimeError(f"Database not found at {DB_PATH}. Run 'stellashelf scan' first.")
     return init_db(DB_PATH)
 
 
@@ -52,8 +52,9 @@ _scan_state: dict = {
     "processed": 0,
     "imported": 0,
     "skipped": 0,
+    "calibration_files": 0,
     "current_file": "",
-    "phase": "idle",  # idle, scanning, importing, done
+    "phase": "idle",
     "error": None,
 }
 
@@ -69,201 +70,26 @@ def _make_scan_progress_callback():
     return callback
 
 
-def _run_scan(root: Path, recursive: bool):
-    """Background thread function: scan + import frames."""
+def _run_scan_task(root: Path, recursive: bool):
+    """Background thread task: delegates scan and import to ImporterService."""
     global _scan_state
     try:
-        from stellashelf.scanner import scan_directory, generate_group_key
-        from stellashelf.db import init_db as db_init
-
+        importer = ImporterService(DB_PATH)
         progress_cb = _make_scan_progress_callback()
 
         with _scan_lock:
             _scan_state["phase"] = "scanning"
+            _scan_state["running"] = True
 
-        frames = scan_directory(root, recursive=recursive, progress_callback=progress_cb)
-
-        with _scan_lock:
-            _scan_state["phase"] = "importing"
-            _scan_state["total"] = len(frames)
-            _scan_state["processed"] = 0
-
-        db_path = DB_PATH
-        if not db_path.exists():
-            db_path.parent.mkdir(parents=True, exist_ok=True)
-
-        engine, SessionLocal = db_init(db_path)
-
-        imported = 0
-        skipped = 0
-        cal_files_seen = 0
-
-        with SessionLocal() as session:
-            cameras_seen: dict[str, int] = {}
-            telescopes_seen: dict[str, int] = {}
-            targets_seen: dict[str, int] = {}
-            sessions_seen: dict[str, int] = {}
-
-            existing_paths = set()
-            for row in session.query(Frame.filepath).all():
-                existing_paths.add(row[0])
-
-            for row in session.query(ObsSession.id, ObsSession.group_key).all():
-                sessions_seen[row[1]] = row[0]
-
-            for row in session.query(Camera.id, Camera.name).all():
-                cameras_seen[row[1]] = row[0]
-            for row in session.query(Telescope.id, Telescope.name).all():
-                telescopes_seen[row[1]] = row[0]
-            for row in session.query(Target.id, Target.name).all():
-                targets_seen[row[1]] = row[0]
-
-            for idx, frame in enumerate(frames):
-                camera_id = None
-                if frame.instrume:
-                    if frame.instrume not in cameras_seen:
-                        camera = Camera(
-                            name=frame.instrume,
-                            short_name=frame.instrume.replace("ZWO ", "").replace("ASI Camera", "ASI"),
-                            pixel_size_um=frame.pixel_size_um,
-                        )
-                        session.add(camera)
-                        session.flush()
-                        cameras_seen[frame.instrume] = camera.id
-                    camera_id = cameras_seen[frame.instrume]
-
-                telescope_id = None
-                if frame.telescop:
-                    if frame.telescop not in telescopes_seen:
-                        telescope = Telescope(
-                            name=frame.telescop,
-                            short_name=frame.telescop,
-                            focal_length_mm=frame.focal_length_mm,
-                        )
-                        session.add(telescope)
-                        session.flush()
-                        telescopes_seen[frame.telescop] = telescope.id
-                    telescope_id = telescopes_seen[frame.telescop]
-
-                if not frame.object_name and frame.frame_type in ("BIAS", "DARK", "FLAT"):
-                    cal = CalibrationFile(
-                        camera_id=camera_id,
-                        cal_type=frame.frame_type.lower(),
-                        exposure_s=frame.exposure,
-                        gain=frame.gain,
-                        binning=frame.binning,
-                        ccd_temp=frame.ccd_temp,
-                        filepath=str(frame.filepath),
-                        filename=frame.filename,
-                    )
-                    session.add(cal)
-                    cal_files_seen += 1
-                    with _scan_lock:
-                        _scan_state["processed"] = idx + 1
-                        _scan_state["imported"] = imported + cal_files_seen
-                    continue
-
-                target_id = None
-                obj_name = frame.object_name.strip() if frame.object_name else ""
-                if obj_name and obj_name != "UNKNOWN":
-                    if obj_name not in targets_seen:
-                        target = Target(name=obj_name)
-                        session.add(target)
-                        session.flush()
-                        targets_seen[obj_name] = target.id
-                    target_id = targets_seen.get(obj_name)
-
-                fp = str(frame.filepath)
-                if fp in existing_paths:
-                    skipped += 1
-                    with _scan_lock:
-                        _scan_state["processed"] = idx + 1
-                        _scan_state["skipped"] = skipped
-                    continue
-                existing_paths.add(fp)
-
-                group_key = generate_group_key(frame)
-                obs_id = sessions_seen.get(group_key)
-
-                if obs_id is None:
-                    if target_id is None:
-                        if "UNKNOWN" not in targets_seen:
-                            unk = Target(name="UNKNOWN")
-                            session.add(unk)
-                            session.flush()
-                            targets_seen["UNKNOWN"] = unk.id
-                        target_id = targets_seen["UNKNOWN"]
-
-                    existing_session = session.query(ObsSession).filter_by(group_key=group_key).first()
-                    if existing_session:
-                        obs_id = existing_session.id
-                        sessions_seen[group_key] = obs_id
-                    else:
-                        obs = ObsSession(
-                            target_id=target_id,
-                            camera_id=camera_id,
-                            telescope_id=telescope_id,
-                            date_obs=frame.date_obs,
-                            group_key=group_key,
-                            path=str(frame.filepath.parent),
-                            status="raw",
-                        )
-                        session.add(obs)
-                        session.flush()
-                        obs_id = obs.id
-                        sessions_seen[group_key] = obs_id
-
-                db_frame = Frame(
-                    session_id=obs_id,
-                    filename=frame.filename,
-                    filepath=fp,
-                    file_size=frame.file_size,
-                    frame_type=frame.frame_type or "LIGHT",
-                    object_name=obj_name,
-                    instrume=frame.instrume or "",
-                    telescop=frame.telescop or "",
-                    filter_name=frame.filter_name or "",
-                    exposure=frame.exposure,
-                    gain=frame.gain,
-                    ccd_temp=frame.ccd_temp,
-                    binning=frame.binning,
-                    date_obs=frame.date_obs,
-                    date_local=frame.date_local,
-                    width=frame.width,
-                    height=frame.height,
-                    pixel_size_um=frame.pixel_size_um,
-                    focal_length_mm=frame.focal_length_mm,
-                    ra_deg=frame.ra_deg,
-                    dec_deg=frame.dec_deg,
-                    site_name=frame.site_name or "",
-                    observer=frame.observer or "",
-                    creator=frame.creator or "",
-                )
-                session.add(db_frame)
-                imported += 1
-
-                with _scan_lock:
-                    _scan_state["processed"] = idx + 1
-                    _scan_state["imported"] = imported
-
-            session.commit()
-
-            # Recalculate session stats
-            session.execute(text(
-                """
-                UPDATE sessions SET
-                    frame_count = (SELECT COUNT(*) FROM frames WHERE frames.session_id = sessions.id),
-                    total_exposure_s = COALESCE((SELECT SUM(frames.exposure) FROM frames WHERE frames.session_id = sessions.id), 0),
-                    total_exposure_h = COALESCE((SELECT SUM(frames.exposure) FROM frames WHERE frames.session_id = sessions.id), 0) / 3600.0
-                """
-            ))
-            session.commit()
+        stats = importer.import_from_path(root, recursive=recursive, progress_callback=progress_cb)
 
         with _scan_lock:
-            _scan_state["running"] = False
             _scan_state["phase"] = "done"
-            _scan_state["imported"] = imported
-            _scan_state["skipped"] = skipped
+            _scan_state["imported"] = stats["imported"]
+            _scan_state["skipped"] = stats["skipped"]
+            _scan_state["calibration_files"] = stats["calibration_files"]
+            _scan_state["running"] = False
+            _scan_state["error"] = None
 
     except Exception as e:
         with _scan_lock:
@@ -407,10 +233,7 @@ def start_scan(request: ScanRequest):
             raise HTTPException(status_code=409, detail="A scan is already running")
 
     scan_path = Path(request.path)
-    allowed_prefix = "/mnt/data/Astro"
     resolved = scan_path.resolve()
-    if not str(resolved).startswith(allowed_prefix):
-        raise HTTPException(status_code=403, detail=f"Path must start with {allowed_prefix}")
 
     if not resolved.exists() or not resolved.is_dir():
         raise HTTPException(status_code=404, detail=f"Path not found: {resolved}")
@@ -421,12 +244,12 @@ def start_scan(request: ScanRequest):
         _scan_state["processed"] = 0
         _scan_state["imported"] = 0
         _scan_state["skipped"] = 0
+        _scan_state["calibration_files"] = 0
         _scan_state["current_file"] = "Initializing..."
         _scan_state["phase"] = "scanning"
         _scan_state["error"] = None
 
-    import threading
-    thread = threading.Thread(target=_run_scan, args=(resolved, request.recursive), daemon=True)
+    thread = threading.Thread(target=_run_scan_task, args=(resolved, request.recursive), daemon=True)
     thread.start()
 
     return {"status": "started", "path": str(resolved)}

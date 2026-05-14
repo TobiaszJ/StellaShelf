@@ -1,32 +1,12 @@
 # Roadmap
 
-## Milestone 1 — Foundation (Week 1-2)
+## Current Status: Foundation Complete ✅
 
-> Project skeleton, database schema, FITS scanner, API stub
+The core scanning, database, and API infrastructure is operational. The Vue 3 frontend provides a modern browsing experience.
 
-- [ ] Project structure (Python package, pyproject.toml, dev dependencies)
-- [ ] SQLite schema (targets, sessions, frames, equipment, FTS5 index)
-- [ ] FITS header scanner (support compressed FITS from SGP)
-- [ ] Filename-based fallback parser
-- [ ] Auto-grouping logic (object + date + instrument + filter → session)
-- [ ] CLI: `stellashelf scan <path>` with progress reporting
-- [ ] FastAPI skeleton with /api/v1/ endpoints
-- [ ] CI: GitHub Actions (lint, type-check, test)
+## Upcoming Milestones
 
-## Milestone 2 — Scanner & Import (Week 3-4)
-
-> Full scanner with web UI for import workflows
-
-- [ ] Recursive directory scanner with progress tracking
-- [ ] Import preview: detected metadata before committing
-- [ ] Equipment auto-detection from headers (cameras, telescopes, filters)
-- [ ] Calibration file detection (master darks, biases, flats)
-- [ ] Web UI: Scan page with live progress
-- [ ] Web UI: Import review with grouping suggestions
-
-## Milestone 3 — Browse & Search (Week 5-6)
-
-> Core browsing experience
+### Milestone 3 — Browse & Search Enhancements (Week 5-6)
 
 - [ ] Targets overview: filterable/sortable table with badges
 - [ ] Session detail view: frame list, calibration status, exposure totals
@@ -35,7 +15,7 @@
 - [ ] Dashboard: stats (total objects, sessions, exposure hours, storage)
 - [ ] Thumbnail generation for sample frames
 
-## Milestone 4 — Pipeline (Week 7-8)
+### Milestone 4 — Pipeline Integration (Week 7-8)
 
 > Siril integration
 
@@ -45,7 +25,7 @@
 - [ ] Pipeline status tracking via WebSocket
 - [ ] Result preview (stacked image thumbnail)
 
-## Milestone 5 — Polish & Release (Week 9-10)
+### Milestone 5 — Polish & Release (Week 9-10)
 
 - [ ] Settings page (paths, equipment overrides)
 - [ ] Dark mode
