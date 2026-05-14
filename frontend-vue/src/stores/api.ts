@@ -27,6 +27,7 @@ export interface Session {
   total_exposure_s: number
   total_exposure_h: number
   frame_count: number
+  folder_path: string | null
 }
 
 export interface Frame {
@@ -50,6 +51,7 @@ export interface Camera {
   short_name: string | null
   pixel_size_um: number | null
   frame_count: number
+  folder_path: string | null
   total_exposure_h: number
 }
 
@@ -59,12 +61,14 @@ export interface Telescope {
   short_name: string | null
   focal_length_mm: number | null
   frame_count: number
+  folder_path: string | null
   total_exposure_h: number
 }
 
 export interface FilterStat {
   name: string
   frame_count: number
+  folder_path: string | null
   total_exposure_h: number
 }
 

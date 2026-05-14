@@ -151,6 +151,7 @@ class SessionSchema(BaseModel):
     total_exposure_s: float
     total_exposure_h: float
     frame_count: int
+    folder_path: str | None = None
 
 
 class FrameSchema(BaseModel):
@@ -393,6 +394,7 @@ def get_dashboard():
                 ObsSession.date_obs,
                 ObsSession.total_exposure_h,
                 ObsSession.frame_count,
+                ObsSession.path.label("folder_path"),
                 Target.name.label("target_name"),
             )
             .join(Target, Target.id == ObsSession.target_id)
@@ -617,6 +619,7 @@ def get_target_sessions(
                 ObsSession.total_exposure_s,
                 ObsSession.total_exposure_h,
                 ObsSession.frame_count,
+                ObsSession.path.label("folder_path"),
                 Camera.name.label("camera_name"),
                 Telescope.name.label("telescope_name"),
             )
@@ -643,6 +646,7 @@ def get_target_sessions(
                 total_exposure_s=r.total_exposure_s,
                 total_exposure_h=round(r.total_exposure_h, 2),
                 frame_count=r.frame_count,
+                folder_path=r.folder_path,
             )
             for r in q.order_by(ObsSession.date_obs.desc())
             .offset((page - 1) * page_size)
@@ -685,6 +689,7 @@ def list_sessions(
                 ObsSession.total_exposure_s,
                 ObsSession.total_exposure_h,
                 ObsSession.frame_count,
+                ObsSession.path.label("folder_path"),
                 Target.name.label("target_name"),
                 Camera.name.label("camera_name"),
                 Telescope.name.label("telescope_name"),
@@ -725,6 +730,7 @@ def list_sessions(
                 total_exposure_s=r.total_exposure_s,
                 total_exposure_h=round(r.total_exposure_h, 2),
                 frame_count=r.frame_count,
+                folder_path=r.folder_path,
             )
             for r in q.order_by(order_col).offset((page - 1) * page_size).limit(page_size).all()
         ]
@@ -748,6 +754,7 @@ def get_session(session_id: int):
                 ObsSession.total_exposure_s,
                 ObsSession.total_exposure_h,
                 ObsSession.frame_count,
+                ObsSession.path.label("folder_path"),
                 Target.name.label("target_name"),
                 Camera.name.label("camera_name"),
                 Telescope.name.label("telescope_name"),
@@ -772,6 +779,7 @@ def get_session(session_id: int):
             total_exposure_s=obs.total_exposure_s,
             total_exposure_h=round(obs.total_exposure_h, 2),
             frame_count=obs.frame_count,
+            folder_path=obs.folder_path,
         )
 
 
@@ -969,6 +977,7 @@ def list_cameras():
                 short_name=r.short_name,
                 pixel_size_um=r.pixel_size_um,
                 frame_count=r.frame_count,
+                folder_path=r.folder_path,
                 total_exposure_h=round(r.total_s / 3600, 1),
             )
             for r in results
@@ -1001,6 +1010,7 @@ def list_telescopes():
                 short_name=r.short_name,
                 focal_length_mm=r.focal_length_mm,
                 frame_count=r.frame_count,
+                folder_path=r.folder_path,
                 total_exposure_h=round(r.total_s / 3600, 1),
             )
             for r in results

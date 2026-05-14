@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { useApiStore, type SearchResult } from '@/stores/api'
+import { useApiStore } from '@/stores/api'
 
 const apiStore = useApiStore()
 const router = useRouter()

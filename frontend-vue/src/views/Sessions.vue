@@ -13,6 +13,13 @@ const totalItems = ref(0)
 const statusFilter = ref('')
 const sortBy = ref('date_obs')
 
+function shortPath(path: string | null | undefined): string {
+  if (!path) return '-'
+  const parts = path.split('/')
+  // Show last 3 parts (e.g. .../Camera/Telescope/Target)
+  return parts.length > 3 ? '.../' + parts.slice(-3).join('/') : path
+}
+
 async function load() {
   const res = await apiStore.fetch<PaginatedResponse<Session>>('/sessions', {
     page: page.value,
@@ -65,6 +72,7 @@ watch([page, statusFilter, sortBy], load, { immediate: true })
           <th>Kamera</th>
           <th>Teleskop</th>
           <th>Belichtung</th>
+          <th>Ordner</th>
           <th>Frames</th>
           <th>Status</th>
         </tr>
@@ -81,6 +89,7 @@ watch([page, statusFilter, sortBy], load, { immediate: true })
           <td>{{ s.camera_name || '-' }}</td>
           <td>{{ s.telescope_name || '-' }}</td>
           <td>{{ s.total_exposure_h }}h</td>
+          <td class="folder-cell">{{ shortPath(s.folder_path) }}</td>
           <td>{{ s.frame_count }}</td>
           <td><span class="badge badge-light">{{ s.status }}</span></td>
         </tr>
