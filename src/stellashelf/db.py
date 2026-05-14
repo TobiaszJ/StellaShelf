@@ -22,6 +22,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, relationship, sessionmaker
 
+from stellashelf.config import get_db_path
+
 
 class Base(DeclarativeBase):
     pass
@@ -234,12 +236,22 @@ class Setting(Base):
 # ---------------------------------------------------------------------------
 
 
-def get_db_path(app_dir: Path | None = None) -> Path:
-    """Get the database file path."""
-    if app_dir is None:
-        app_dir = Path.home() / ".stellashelf"
-    app_dir.mkdir(parents=True, exist_ok=True)
-    return app_dir / "stellashelf.db"
+# Re-export get_db_path for backwards compatibility (used by cli.py, api.py)
+# get_db_path is imported at the top from stellashelf.config
+
+__all__ = [
+    "Base",
+    "Camera",
+    "Telescope",
+    "Filter",
+    "Target",
+    "Session",
+    "Frame",
+    "CalibrationFile",
+    "Setting",
+    "get_db_path",
+    "init_db",
+]
 
 
 def init_db(db_path: Path | None = None) -> tuple:

@@ -16,30 +16,50 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func as sa_func
 from sqlalchemy import text
 
+from stellashelf.config import DEFAULT_DB_PATH
 from stellashelf.db import CalibrationFile, Camera, Frame, Setting, Target, Telescope, init_db
 from stellashelf.db import Session as ObsSession
 from stellashelf.importer import ImporterService
 
-DB_PATH = Path("~/stellashelf/stellashelf.db").expanduser().resolve()
+# Module-level db path, can be overridden via create_app() or set_db_path()
+_db_path: Path = DEFAULT_DB_PATH
+
+
+def set_db_path(path: Path) -> None:
+    """Override the database path used by the API."""
+    global _db_path
+    _db_path = path
 
 
 def get_session_local():
     """Initialize and return engine, SessionLocal."""
-    if not DB_PATH.exists():
-        raise RuntimeError(f"Database not found at {DB_PATH}. Run 'stellashelf scan' first.")
-    return init_db(DB_PATH)
+    if not _db_path.exists():
+        raise RuntimeError(f"Database not found at {_db_path}. Run 'stellashelf scan' first.")
+    return init_db(_db_path)
+
+
+def create_app(db_path: Path | None = None) -> FastAPI:
+    """Create and configure the FastAPI application.
+
+    Args:
+        db_path: Path to the SQLite database. Defaults to ~/.stellashelf/stellashelf.db.
+    """
+    if db_path is not None:
+        set_db_path(db_path)
+
+    # Allow CORS for local development
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    return app
 
 
 app = FastAPI(title="StellaShelf", version="0.2.0")
-
-# Allow CORS for local development
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 
 # ---------------------------------------------------------------------------
@@ -77,7 +97,7 @@ def _run_scan_task(root: Path, recursive: bool):
     """Background thread task: delegates scan and import to ImporterService."""
     global _scan_state
     try:
-        importer = ImporterService(DB_PATH)
+        importer = ImporterService(_db_path)
         progress_cb = _make_scan_progress_callback()
 
         with _scan_lock:
@@ -226,7 +246,7 @@ class ScanRequest(BaseModel):
 
 @app.get("/api/v1/health")
 def health_check():
-    return {"status": "ok", "db": str(DB_PATH)}
+    return {"status": "ok", "db": str(_db_path)}
 
 
 @app.get("/api/v1/search")
@@ -376,7 +396,7 @@ def get_dashboard():
                 Target.name.label("target_name"),
             )
             .join(Target, Target.id == ObsSession.target_id)
-            .filter(ObsSession.date_obs is not None)
+            .filter(ObsSession.date_obs.isnot(None))
             .order_by(ObsSession.date_obs.desc())
             .limit(10)
             .all()
@@ -529,7 +549,7 @@ def list_target_types():
             row[0]
             for row in session.query(Target.object_type)
             .distinct()
-            .filter(Target.object_type is not None)
+            .filter(Target.object_type.isnot(None))
             .order_by(Target.object_type)
             .all()
         ]
@@ -537,7 +557,7 @@ def list_target_types():
             row[0]
             for row in session.query(Target.constellation)
             .distinct()
-            .filter(Target.constellation is not None)
+            .filter(Target.constellation.isnot(None))
             .order_by(Target.constellation)
             .all()
         ]
@@ -832,9 +852,9 @@ def list_frames(
         if camera:
             q = q.filter(Frame.instrume.ilike(f"%{camera}%"))
         if has_coordinates is True:
-            q = q.filter(Frame.ra_deg is not None, Frame.dec_deg is not None)
+            q = q.filter(Frame.ra_deg.isnot(None), Frame.dec_deg.isnot(None))
         elif has_coordinates is False:
-            q = q.filter(Frame.ra_deg is None, Frame.dec_deg is None)
+            q = q.filter(Frame.ra_deg.is_(None), Frame.dec_deg.is_(None))
 
         total = q.count()
         pages = (total + page_size - 1) // page_size
@@ -998,7 +1018,7 @@ def list_filters():
                 sa_func.count(Frame.id).label("frame_count"),
                 sa_func.coalesce(sa_func.sum(Frame.exposure), 0).label("total_s"),
             )
-            .filter(Frame.filter_name is not None, Frame.filter_name != "")
+            .filter(Frame.filter_name.isnot(None), Frame.filter_name != "")
             .group_by(Frame.filter_name)
             .order_by(sa_func.count(Frame.id).desc())
             .all()
@@ -1095,7 +1115,10 @@ def run_platesolve():
 
     with SessionLocal() as sess:
         unplated = (
-            sess.query(Frame).filter(Frame.ra_deg is None, Frame.dec_deg is None).limit(50).all()
+            sess.query(Frame)
+            .filter(Frame.ra_deg.is_(None), Frame.dec_deg.is_(None))
+            .limit(50)
+            .all()
         )
 
         for frame in unplated:

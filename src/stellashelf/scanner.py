@@ -412,8 +412,18 @@ def generate_group_key(frame: ScannedFrame) -> str:
 
 
 def generate_thumbnail(filepath: Path, size: int = 200) -> bytes | None:
-    """..."""  # (existing function, unchanged)
-    # ... existing code ...
+    """Generate a JPEG thumbnail from a FITS file.
+
+    Extracts 2D image data from the last HDU, normalizes using percentile
+    stretching, and resizes to the requested dimensions.
+
+    Args:
+        filepath: Path to the FITS file.
+        size: Maximum width/height of the thumbnail.
+
+    Returns:
+        JPEG bytes on success, None on failure.
+    """
     try:
         with fits.open(str(filepath)) as hdul:
             # Get image data from the last HDU (usually has the data)

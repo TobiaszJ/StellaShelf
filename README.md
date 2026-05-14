@@ -67,10 +67,10 @@ src/stellashelf/
 
 frontend-vue/
 └── src/
-    ├── views/      # 12 Vue views (Dashboard, Targets, Sessions, Equipment, Search, Settings, Scan, Platesolve, Help)
+    ├── views/      # 11 Vue views (Dashboard, Targets, TargetDetail, Sessions, SessionDetail, Equipment, Search, Scan, Settings, Platesolve, Help)
     ├── stores/     # Pinia stores (api, scan, theme)
     ├── components/ # Reusable components (StatCard, Pagination)
-    └── router/     # Vue Router with 12 routes
+    └── router/     # Vue Router with 11 routes
 ```
 
 ### Database Schema
@@ -82,7 +82,7 @@ frontend-vue/
 - **CalibrationFile**: Master BIAS/DARK/FLAT files
 - **Setting**: Key/value application configuration
 
-## Features
+## Advanced Features
 
 - **Full-Text Search**: FTS5-powered search across targets, sessions, and frames
 - **Object Type Badges**: Color-coded labels for Galaxy, Nebula, Star, Cluster, etc.
@@ -156,7 +156,7 @@ AGPL-3.0 — Network copyleft. If you run a modified version as a service, you m
 
 See [docs/roadmap.md](docs/roadmap.md) for detailed development milestones.
 
-- [ ] ASTAP platesolving for frames missing coordinates
+- [x] ASTAP platesolving for frames missing coordinates
 - [ ] Siril `.sss` script generator for processing pipelines
 - [ ] XISF file parsing
 - [ ] Quality metrics (FWHM, eccentricity) from Siril/Astap

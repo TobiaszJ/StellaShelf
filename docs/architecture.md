@@ -13,22 +13,29 @@ StellaShelf is a three-tier application:
 ```mermaid
 erDiagram
     Target ||--o{ Session : has
-    Equipment ||--o{ Session : used_in
+    Camera ||--o{ Session : used_in
+    Telescope ||--o{ Session : used_in
     Session ||--o{ Frame : contains
-    Equipment {
+    Camera {
         int id
-        string type
         string name
-        string details
+        string short_name
+        float pixel_size_um
+    }
+    Telescope {
+        int id
+        string name
+        string short_name
+        float focal_length_mm
     }
     Target {
         int id
         string name
         string alt_names
-        string type
+        string object_type
         string constellation
-        float ra
-        float dec
+        float ra_deg
+        float dec_deg
     }
     Session {
         int id
@@ -36,22 +43,26 @@ erDiagram
         int camera_id
         int telescope_id
         date date_obs
-        string filter
+        string group_key
         string status
         string path
-        float total_exposure
+        float total_exposure_s
+        float total_exposure_h
         int frame_count
     }
     Frame {
         int id
         int session_id
         string filename
+        string filepath
         string frame_type
+        string object_name
         float exposure
         int gain
         float ccd_temp
         int binning
-        string checker
+        float ra_deg
+        float dec_deg
     }
 ```
 
@@ -142,15 +153,16 @@ src/stellashelf/
 ├── db.py           # SQLAlchemy models (Target, Session, Frame, Camera, Telescope, CalibrationFile, Setting)
 ├── importer.py     # Centralized import pipeline (CLI & API)
 ├── cli.py          # Click CLI commands
-└── api.py          # FastAPI REST API (20+ endpoints) + Vue 3 SPA serving
+├── api.py          # FastAPI REST API (20+ endpoints) + Vue 3 SPA serving
+└── config.py       # Centralized configuration (paths, defaults)
 
 frontend-vue/
 └── src/
-    ├── views/      # 12 Vue views: Dashboard, Targets, TargetDetail, Sessions, SessionDetail,
+    ├── views/      # 11 Vue views: Dashboard, Targets, TargetDetail, Sessions, SessionDetail,
     │               #   Equipment, Search, Scan, Settings, Platesolve, Help
     ├── stores/     # 3 Pinia stores: api (HTTP client), scan (scan progress), theme (dark/light)
     ├── components/ # Reusable: StatCard, Pagination
-    └── router/     # Vue Router with 12 routes
+    └── router/     # Vue Router with 11 routes
 ```
 
 The `ImporterService` in `importer.py` centralizes all import logic, eliminating duplication between CLI and API. Both interfaces delegate to this service, ensuring consistent behavior and easier maintenance.

@@ -7,6 +7,7 @@ import click
 from rich.console import Console
 from rich.table import Table
 
+from stellashelf.config import DEFAULT_DB_PATH
 from stellashelf.db import CalibrationFile, Camera, Frame, Target, Telescope, init_db
 from stellashelf.db import Session as ObsSession
 from stellashelf.importer import ImporterService
@@ -23,7 +24,7 @@ def main():
 
 @main.command()
 @click.argument("path", type=click.Path(exists=True, file_okay=False))
-@click.option("--db", default="~/stellashelf/stellashelf.db", help="Path to SQLite database")
+@click.option("--db", default=str(DEFAULT_DB_PATH), help="Path to SQLite database")
 @click.option("--recursive/--no-recursive", default=True, help="Scan subdirectories")
 @click.option("--dry-run", is_flag=True, help="Scan only, don't write to database")
 @click.option("--verbose", "-v", is_flag=True, help="Show detailed output")
@@ -59,7 +60,7 @@ def scan(path: str, db: str, recursive: bool, dry_run: bool, verbose: bool):
 
 
 @main.command()
-@click.option("--db", default="~/stellashelf/stellashelf.db", help="Path to SQLite database")
+@click.option("--db", default=str(DEFAULT_DB_PATH), help="Path to SQLite database")
 def stats(db: str):
     """Show database statistics."""
     db_path = Path(db).expanduser().resolve()
@@ -92,7 +93,7 @@ def stats(db: str):
 @main.command()
 @click.option("--host", default="0.0.0.0", help="Host to bind to")
 @click.option("--port", default=8321, help="Port to bind to")
-@click.option("--db", default="~/stellashelf/stellashelf.db", help="Path to SQLite database")
+@click.option("--db", default=str(DEFAULT_DB_PATH), help="Path to SQLite database")
 @click.option("--reload", is_flag=True, help="Enable auto-reload for development")
 def serve(host: str, port: int, db: str, reload: bool):
     """Start the StellaShelf web API server."""
@@ -101,6 +102,11 @@ def serve(host: str, port: int, db: str, reload: bool):
     db_path = Path(db).expanduser().resolve()
     console.print(f"[bold cyan]StellaShelf[/bold cyan] starting API server on {host}:{port}")
     console.print(f"Database: {db_path}")
+
+    # Inject db path into the API before starting uvicorn
+    from stellashelf.api import set_db_path
+
+    set_db_path(db_path)
 
     uvicorn.run(
         "stellashelf.api:app",
