@@ -363,6 +363,12 @@ a:hover { text-decoration: underline; }
 .btn-success { background: var(--accent2); }
 .btn-danger { background: var(--danger); }
 .btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+.btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+.btn-ghost { background: transparent; border: 1px solid transparent; color: var(--text-muted); }
+.btn-ghost:hover { background: rgba(255,255,255,0.03); color: var(--text); }
+.sortable { cursor: pointer; user-select: none; }
+.sortable:hover { color: var(--accent); }
 
 /* Filters */
 .filters {

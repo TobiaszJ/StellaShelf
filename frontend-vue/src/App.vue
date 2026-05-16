@@ -2,9 +2,11 @@
 import { RouterView, RouterLink } from 'vue-router'
 import { Telescope, Target, Camera, FolderOpen, ScanLine, Search, Settings as SettingsIcon, HelpCircle, Globe, Sun, Moon } from 'lucide-vue-next'
 import { useScanStore } from '@/stores/scan'
+import { usePlatesolveStore } from '@/stores/platesolve'
 import { useThemeStore } from '@/stores/theme'
 
 const scanStore = useScanStore()
+const platesolveStore = usePlatesolveStore()
 const themeStore = useThemeStore()
 
 // Initialize theme on mount
@@ -14,6 +16,11 @@ themeStore.init()
 scanStore.fetchStatus()
 if (scanStore.state.running) {
   scanStore.startPolling()
+}
+
+platesolveStore.fetchStatus()
+if (platesolveStore.state.running) {
+  platesolveStore.startPolling()
 }
 
 function toggleTheme() {
@@ -31,7 +38,7 @@ function toggleTheme() {
           <Telescope :size="20" />
           StellaShelf
         </h1>
-        <div class="version">v0.2.0</div>
+        <div class="version">v0.3.0</div>
       </div>
       <nav class="sidebar-nav">
         <RouterLink to="/" class="nav-item">
@@ -53,6 +60,10 @@ function toggleTheme() {
         <RouterLink to="/search" class="nav-item">
           <Search :size="18" />
           Suche
+        </RouterLink>
+        <RouterLink to="/scan" class="nav-item">
+          <ScanLine :size="18" />
+          Scan
         </RouterLink>
         <RouterLink to="/settings" class="nav-item">
           <SettingsIcon :size="18" />
@@ -85,6 +96,16 @@ function toggleTheme() {
           <div class="progress-bar-fill" :style="{ width: scanStore.progress + '%' }"></div>
         </div>
         <span class="scan-pct">{{ scanStore.progress }}%</span>
+      </div>
+
+      <!-- Platesolve Banner -->
+      <div v-if="platesolveStore.state.running" class="scan-banner">
+        <Globe :size="16" style="color: var(--accent2)" />
+        <span class="scan-text">{{ platesolveStore.phaseLabel }}</span>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" :style="{ width: platesolveStore.progress + '%', background: 'linear-gradient(90deg, var(--accent2), var(--accent))' }"></div>
+        </div>
+        <span class="scan-pct">{{ platesolveStore.progress }}%</span>
       </div>
 
       <main class="content-area">

@@ -8,13 +8,15 @@ const loading = ref(true)
 const saving = ref(false)
 const saved = ref(false)
 const activeTab = ref('general')
+const confirmingReset = ref(false)
+const resetBusy = ref(false)
 
 const cameras = ref<Camera[]>([])
 const telescopes = ref<Telescope[]>([])
 
 const SETTINGS_DEFINITIONS = [
-  { key: 'scan_paths', label: 'Scan-Verzeichnisse', description: 'Komma-getrennte Liste von Pfaden', type: 'text' },
-  { key: 'astap_binary', label: 'ASTAP Binary Pfad', description: 'Pfad zur ASTAP ausführbaren Datei', type: 'text' },
+  { key: 'scan_paths', label: 'Scan-Verzeichnisse', description: 'Komma-getrennte Liste von Pfaden', type: 'text', placeholder: 'z.B. /mnt/data/Astro/astro,/home/user/astro' },
+  { key: 'astap_binary', label: 'ASTAP Binary Pfad', description: 'Pfad zur ASTAP ausführbaren Datei', type: 'text', placeholder: 'z.B. /usr/bin/astap' },
   { key: 'theme', label: 'Theme', description: 'light / dark / system', type: 'select', options: ['light', 'dark', 'system'] },
 ]
 
@@ -63,6 +65,20 @@ async function save() {
   }
 }
 
+async function resetDb() {
+  resetBusy.value = true
+  try {
+    await apiStore.post('/db/reset', { confirm: true })
+    confirmingReset.value = false
+    alert('Datenbank zurückgesetzt. Alle Daten wurden gelöscht.')
+    window.location.reload()
+  } catch (e: any) {
+    alert('Fehler: ' + (e.response?.data?.detail || e.message))
+  } finally {
+    resetBusy.value = false
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -79,6 +95,7 @@ onMounted(load)
       <div class="tabs">
         <button :class="['tab', { active: activeTab === 'general' }]" @click="activeTab = 'general'">Allgemein</button>
         <button :class="['tab', { active: activeTab === 'equipment' }]" @click="activeTab = 'equipment'">Equipment-Namen</button>
+        <button :class="['tab', 'tab-danger', { active: activeTab === 'danger' }]" @click="activeTab = 'danger'">Gefahrenzone</button>
       </div>
 
       <!-- General Settings -->
@@ -90,7 +107,7 @@ onMounted(load)
             <select v-if="def.type === 'select'" :id="def.key" v-model="settings[def.key]" class="setting-input">
               <option v-for="opt in def.options" :key="opt" :value="opt">{{ opt }}</option>
             </select>
-            <input v-else :id="def.key" v-model="settings[def.key]" type="text" class="setting-input" />
+            <input v-else :id="def.key" v-model="settings[def.key]" type="text" class="setting-input" :placeholder="def.placeholder || ''" />
           </div>
         </div>
       </div>
@@ -135,6 +152,31 @@ onMounted(load)
           </tbody>
         </table>
         <p v-else class="empty">Keine Teleskope gefunden.</p>
+      </div>
+
+      <!-- Danger Zone -->
+      <div v-if="activeTab === 'danger'" class="card danger-zone">
+        <h3 style="color: var(--danger);">Datenbank zurücksetzen</h3>
+        <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">
+          Löscht alle Targets, Sessions, Frames, Equipment und Einstellungen.
+          Die Datenbank wird danach neu initialisiert. Diese Aktion kann nicht rückgängig gemacht werden.
+        </p>
+        <div v-if="!confirmingReset">
+          <button class="btn btn-danger" @click="confirmingReset = true">
+            Datenbank zurücksetzen
+          </button>
+        </div>
+        <div v-else class="reset-confirm">
+          <p style="margin-bottom: 12px;"><strong>Wirklich alle Daten löschen?</strong></p>
+          <div class="reset-actions">
+            <button class="btn btn-danger" @click="resetDb" :disabled="resetBusy">
+              {{ resetBusy ? 'Lösche...' : 'Ja, alles löschen' }}
+            </button>
+            <button class="btn btn-ghost" @click="confirmingReset = false" :disabled="resetBusy">
+              Abbrechen
+            </button>
+          </div>
+        </div>
       </div>
 
       <div class="setting-actions">
@@ -218,5 +260,23 @@ onMounted(load)
   color: var(--accent2);
   font-size: 13px;
   font-weight: 600;
+}
+.tab-danger {
+  color: var(--danger) !important;
+}
+.tab-danger.active {
+  border-bottom-color: var(--danger) !important;
+}
+.danger-zone {
+  border-color: rgba(248, 81, 73, 0.3);
+}
+.reset-confirm {
+  padding: 12px;
+  background: rgba(248, 81, 73, 0.05);
+  border-radius: 8px;
+}
+.reset-actions {
+  display: flex;
+  gap: 8px;
 }
 </style>

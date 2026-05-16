@@ -22,6 +22,9 @@ from astropy.io import fits
 from rich.console import Console
 from rich.progress import Progress
 
+from stellashelf.catalog import normalize_object_name
+from stellashelf.config import KNOWN_CAMERAS
+
 console = Console()
 
 
@@ -67,19 +70,9 @@ def _parse_dms_to_degrees(dms_str: str) -> float | None:
 # ---------------------------------------------------------------------------
 
 # Known camera folder names under Astro/astro/
-_KNOWN_CAMERAS = frozenset(
-    {
-        "ASI183MMPro",
-        "ASI2600MMPro",
-        "ASI2600MMPro2",
-        "ASI294MMPro",
-        "ASI533MCPro",
-    }
-)
-
-# Regex: match Astro/astro/<CAMERA>/ where CAMERA is a known camera name
+# Loaded from config (overridable via STELLASHELF_KNOWN_CAMERAS env var)
 _CAMERA_PATH_RE = re.compile(
-    r"(?:^|/)Astro/astro/(" + "|".join(re.escape(c) for c in sorted(_KNOWN_CAMERAS)) + r")/",
+    r"(?:^|/)Astro/astro/(" + "|".join(re.escape(c) for c in sorted(KNOWN_CAMERAS)) + r")/",
     re.IGNORECASE,
 )
 
@@ -283,11 +276,11 @@ def _extract_object_from_filename(filename: str) -> str:
     for pat in patterns:
         m = re.match(pat, stem, re.IGNORECASE)
         if m:
-            return m.group(1).strip().upper()
+            return normalize_object_name(m.group(1))
 
     m = re.match(r"^([A-Z]{1,5}\s*\d+[a-zA-Z0-9-]*)", stem, re.IGNORECASE)
     if m:
-        return m.group(1).strip().upper()
+        return normalize_object_name(m.group(1))
 
     return ""
 
@@ -305,7 +298,8 @@ def scan_fits_file(filepath: Path) -> ScannedFrame:
             header = _extract_header(hdul)
 
             # String fields — path extraction is PRIMARY, FITS header is fallback
-            frame.object_name = str(header.get("OBJECT", "")).strip()
+            raw_object = str(header.get("OBJECT", "")).strip()
+            frame.object_name = normalize_object_name(raw_object) if raw_object else ""
             path_camera = _extract_camera_from_path(filepath)
             instrume_val = path_camera if path_camera else str(header.get("INSTRUME", "")).strip()
             frame.instrume = instrume_val
@@ -537,12 +531,23 @@ def generate_thumbnail(filepath: Path, size: int = 200) -> bytes | None:
         return None
 
 
-def platesolve_frame(filepath: Path, astap_binary: str = "astap") -> dict | None:
+def platesolve_frame(
+    filepath: Path,
+    astap_binary: str = "astap_cli",
+    ra_hint: float | None = None,
+    dec_hint: float | None = None,
+    timeout: int = 120,
+) -> dict | None:
     """Run ASTAP CLI on a FITS file to extract RA/Dec coordinates.
+
+    Does NOT modify the original FITS file — all results go to temp files.
 
     Args:
         filepath: Path to the FITS file.
-        astap_binary: Path to the ASTAP executable.
+        astap_binary: Path to the ASTAP executable (CLI version).
+        ra_hint: Approximate RA in degrees (or None for blind solve).
+        dec_hint: Approximate Dec in degrees (or None for blind solve).
+        timeout: Max seconds to wait for ASTAP.
 
     Returns:
         Dictionary with 'ra_deg' and 'dec_deg' on success, or None.
@@ -550,29 +555,43 @@ def platesolve_frame(filepath: Path, astap_binary: str = "astap") -> dict | None
     import subprocess
     import tempfile
 
-    tmp_path = None
+    tmp_base = None
     try:
-        # ASTAP can output coordinates to a text file
-        with tempfile.NamedTemporaryFile(suffix=".txt", delete=False, mode="w+") as tmp:
-            tmp_path = tmp.name
+        with tempfile.NamedTemporaryFile(suffix=".wcs", delete=False) as tmp:
+            tmp_base = str(Path(tmp.name).with_suffix(""))
+            tmp_wcs = Path(tmp_base + ".wcs")
+            tmp_ini = Path(tmp_base + ".ini")
 
-        result = subprocess.run(
-            [astap_binary, "-f", str(filepath), "-o", tmp_path, "-r", "50"],
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
+        cmd = [astap_binary, "-f", str(filepath), "-o", tmp_base, "-r", "10"]
+        if ra_hint is not None and dec_hint is not None:
+            ra_hours = ra_hint / 15.0
+            spd = 180.0 - dec_hint
+            cmd.extend(["-ra", f"{ra_hours:.4f}", "-spd", f"{spd:.1f}"])
+
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
 
         if result.returncode != 0:
             return None
 
-        # Parse the output for coordinates
-        if Path(tmp_path).exists():
-            content = Path(tmp_path).read_text()
+        if "No solution found" in result.stdout:
+            return None
 
-            ra_match = re.search(r"RA\s*=\s*([\d.]+)", content, re.IGNORECASE)
-            dec_match = re.search(r"DEC\s*=\s*([-\d.]+)", content, re.IGNORECASE)
+        # Read WCS file (FITS format WCS header with CRVAL1/CRVAL2)
+        if tmp_wcs.exists():
+            content = tmp_wcs.read_text()
+            ra_match = re.search(r"CRVAL1\s*=\s*([\d.E+-]+)", content)
+            dec_match = re.search(r"CRVAL2\s*=\s*([\d.E+-]+)", content)
+            if ra_match and dec_match:
+                return {
+                    "ra_deg": float(ra_match.group(1)),
+                    "dec_deg": float(dec_match.group(1)),
+                }
 
+        # Fallback: parse INI file
+        if tmp_ini.exists():
+            content = tmp_ini.read_text()
+            ra_match = re.search(r"ra\s*=\s*([\d.]+)", content, re.IGNORECASE)
+            dec_match = re.search(r"dec\s*=\s*([-\d.]+)", content, re.IGNORECASE)
             if ra_match and dec_match:
                 return {
                     "ra_deg": float(ra_match.group(1)),
@@ -580,11 +599,16 @@ def platesolve_frame(filepath: Path, astap_binary: str = "astap") -> dict | None
                 }
 
         return None
+    except subprocess.TimeoutExpired:
+        return None
     except Exception:
         return None
     finally:
-        if tmp_path and Path(tmp_path).exists():
-            Path(tmp_path).unlink(missing_ok=True)
+        if tmp_base:
+            for suffix in (".wcs", ".ini", ".txt"):
+                p = Path(tmp_base + suffix)
+                if p.exists():
+                    p.unlink(missing_ok=True)
 
 
 def scan_directory(

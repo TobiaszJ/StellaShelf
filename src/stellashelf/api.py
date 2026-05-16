@@ -4,6 +4,7 @@ REST API for browsing astrophotography sessions, frames, and equipment.
 Supports pagination, filtering, and full-text search.
 """
 
+import os
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -20,6 +21,7 @@ from stellashelf.config import DEFAULT_DB_PATH
 from stellashelf.db import CalibrationFile, Camera, Frame, Setting, Target, Telescope, init_db
 from stellashelf.db import Session as ObsSession
 from stellashelf.importer import ImporterService
+from stellashelf.scanner import generate_thumbnail, platesolve_frame
 
 # ---------------------------------------------------------------------------
 # App initialization
@@ -56,9 +58,10 @@ def get_session_local():
 
 app = FastAPI(title="StellaShelf", version="0.2.0")
 
+_cors_origins = os.environ.get("STELLASHELF_CORS_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -80,6 +83,18 @@ _scan_state: dict = {
     "current_file": "",
     "phase": "idle",
     "error": None,
+}
+
+_platesolve_lock = threading.Lock()
+_platesolve_state: dict = {
+    "running": False,
+    "total": 0,
+    "solved": 0,
+    "failed": 0,
+    "phase": "idle",
+    "error": None,
+    "cancelled": False,
+    "log": [],
 }
 
 
@@ -173,6 +188,25 @@ class FrameSchema(BaseModel):
     date_obs: datetime | None
 
 
+class FrameDetailSchema(FrameSchema):
+    file_size: int | None = None
+    instrume: str | None = None
+    telescop: str | None = None
+    date_local: datetime | None = None
+    width: int | None = None
+    height: int | None = None
+    pixel_size_um: float | None = None
+    ra_deg: float | None = None
+    dec_deg: float | None = None
+    focal_length_mm: float | None = None
+    site_name: str | None = None
+    observer: str | None = None
+    creator: str | None = None
+    fwhm: float | None = None
+    eccentricity: float | None = None
+    snr: float | None = None
+
+
 class CameraSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -204,6 +238,19 @@ class CalibrationFileSchema(BaseModel):
     ccd_temp: float | None
     filepath: str
     filename: str
+
+
+class MergeRequest(BaseModel):
+    source_id: int
+    destination_id: int
+
+
+class MergeGroupRequest(BaseModel):
+    canonical_name: str
+
+
+class DbResetRequest(BaseModel):
+    confirm: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -569,6 +616,256 @@ def list_target_types():
         return {"object_types": types, "constellations": constellations}
 
 
+# ---------------------------------------------------------------------------
+# Target Merge & Duplicate Detection
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/v1/targets/duplicates")
+def find_duplicate_targets():
+    """Find targets that are likely duplicates based on normalized name matching."""
+    from stellashelf.catalog import normalize_object_name
+
+    engine, SessionLocal = get_session_local()
+    with SessionLocal() as session:
+        targets = session.query(Target).all()
+        groups: dict[str, list[Target]] = {}
+        for t in targets:
+            norm = normalize_object_name(t.name)
+            if norm not in groups:
+                groups[norm] = []
+            groups[norm].append(t)
+
+        duplicates = []
+        for norm, group in groups.items():
+            if len(group) > 1:
+                duplicates.append(
+                    {
+                        "canonical_name": norm,
+                        "targets": [
+                            {
+                                "id": t.id,
+                                "name": t.name,
+                                "session_count": len(t.sessions) if t.sessions else 0,
+                            }
+                            for t in group
+                        ],
+                    }
+                )
+        return duplicates
+
+
+@app.post("/api/v1/targets/merge")
+def merge_targets(req: MergeRequest):
+    """Merge source target into destination target.
+
+    Moves all sessions from source to destination.
+    Adds source name(s) to destination alt_names.
+    Deletes source target.
+    """
+    if req.source_id == req.destination_id:
+        raise HTTPException(400, "Cannot merge a target into itself")
+
+    engine, SessionLocal = get_session_local()
+    with SessionLocal() as session:
+        source = session.get(Target, req.source_id)
+        dest = session.get(Target, req.destination_id)
+        if not source or not dest:
+            raise HTTPException(404, "Source or destination target not found")
+
+        session.query(ObsSession).filter(ObsSession.target_id == source.id).update(
+            {"target_id": dest.id}
+        )
+
+        session.query(Frame).filter(Frame.object_name == source.name).update(
+            {"object_name": dest.name}
+        )
+
+        all_aliases = set()
+        if dest.alt_names:
+            all_aliases.update(dest.alt_names.split(","))
+        all_aliases.add(source.name)
+        if source.alt_names:
+            all_aliases.update(source.alt_names.split(","))
+        all_aliases.discard(dest.name)
+        all_aliases.discard("")
+        dest.alt_names = ",".join(sorted(all_aliases)) if all_aliases else None
+
+        if dest.ra_deg is None and source.ra_deg is not None:
+            dest.ra_deg = source.ra_deg
+            dest.dec_deg = source.dec_deg
+
+        session.flush()
+
+        session.execute(
+            text(
+                """
+            UPDATE sessions SET
+                frame_count = (SELECT COUNT(*) FROM frames WHERE frames.session_id = sessions.id),
+                total_exposure_s = COALESCE((SELECT SUM(frames.exposure) FROM frames WHERE frames.session_id = sessions.id), 0),
+                total_exposure_h = COALESCE((SELECT SUM(frames.exposure) FROM frames WHERE frames.session_id = sessions.id), 0) / 3600.0
+            WHERE sessions.target_id = :dest_id
+            """
+            ),
+            {"dest_id": dest.id},
+        )
+
+        session.flush()
+        session.execute(text("DELETE FROM targets WHERE id = :tid"), {"tid": source.id})
+        session.commit()
+
+        return {"status": "ok", "target_id": dest.id, "name": dest.name}
+
+
+@app.post("/api/v1/targets/merge-group")
+def merge_target_group(req: MergeGroupRequest):
+    """Auto-merge all targets with the given canonical name into one.
+
+    Keeps the target with the most sessions, merges all others into it.
+    """
+    from stellashelf.catalog import normalize_object_name
+
+    engine, SessionLocal = get_session_local()
+    with SessionLocal() as session:
+        all_targets = session.query(Target).all()
+        group = [t for t in all_targets if normalize_object_name(t.name) == req.canonical_name]
+
+        if len(group) < 2:
+            raise HTTPException(400, "No duplicates found for this name")
+
+        group.sort(key=lambda t: len(t.sessions) if t.sessions else 0, reverse=True)
+        keep = group[0]
+        merged = []
+        for t in group[1:]:
+            session.query(ObsSession).filter(ObsSession.target_id == t.id).update(
+                {"target_id": keep.id}
+            )
+            session.query(Frame).filter(Frame.object_name == t.name).update(
+                {"object_name": keep.name}
+            )
+            all_aliases = set()
+            if keep.alt_names:
+                all_aliases.update(keep.alt_names.split(","))
+            all_aliases.add(t.name)
+            if t.alt_names:
+                all_aliases.update(t.alt_names.split(","))
+            all_aliases.discard(keep.name)
+            all_aliases.discard("")
+            keep.alt_names = ",".join(sorted(all_aliases)) if all_aliases else None
+            if keep.ra_deg is None and t.ra_deg is not None:
+                keep.ra_deg = t.ra_deg
+                keep.dec_deg = t.dec_deg
+            merged.append(t.id)
+            session.flush()
+            session.execute(text("DELETE FROM targets WHERE id = :tid"), {"tid": t.id})
+
+        session.flush()
+        session.execute(
+            text(
+                """
+            UPDATE sessions SET
+                frame_count = (SELECT COUNT(*) FROM frames WHERE frames.session_id = sessions.id),
+                total_exposure_s = COALESCE((SELECT SUM(frames.exposure) FROM frames WHERE frames.session_id = sessions.id), 0),
+                total_exposure_h = COALESCE((SELECT SUM(frames.exposure) FROM frames WHERE frames.session_id = sessions.id), 0) / 3600.0
+            WHERE sessions.target_id = :keep_id
+            """
+            ),
+            {"keep_id": keep.id},
+        )
+        session.commit()
+
+        return {
+            "status": "ok",
+            "target_id": keep.id,
+            "name": keep.name,
+            "merged_ids": merged,
+            "merged_count": len(merged),
+        }
+
+
+@app.post("/api/v1/db/reset")
+def reset_database(req: DbResetRequest):
+    """Delete all data and recreate tables."""
+    if not req.confirm:
+        raise HTTPException(400, "confirm must be true")
+
+    engine, SessionLocal = get_session_local()
+    with SessionLocal() as sess:
+        # Drop FTS5 triggers first so DELETE doesn't fire them
+        sess.execute(text("DROP TRIGGER IF EXISTS frames_fts_ai"))
+        sess.execute(text("DROP TRIGGER IF EXISTS frames_fts_ad"))
+        sess.execute(text("DROP TRIGGER IF EXISTS frames_fts_au"))
+        sess.execute(text("DROP TABLE IF EXISTS frames_fts"))
+
+        # Delete all data (FK-safe order)
+        sess.execute(text("DELETE FROM calibration_files"))
+        sess.execute(text("DELETE FROM frames"))
+        sess.execute(text("DELETE FROM sessions"))
+        sess.execute(text("DELETE FROM targets"))
+        sess.execute(text("DELETE FROM cameras"))
+        sess.execute(text("DELETE FROM telescopes"))
+        sess.execute(text("DELETE FROM filters"))
+        sess.execute(text("DELETE FROM settings"))
+
+        # Recreate FTS5 virtual table
+        sess.execute(
+            text(
+                """
+            CREATE VIRTUAL TABLE IF NOT EXISTS frames_fts USING fts5(
+                object_name, instrume, telescop, filter_name, filename, site_name,
+                content=frames, content_rowid=id
+            )
+            """
+            )
+        )
+        sess.commit()
+
+    with SessionLocal() as sess:
+        sess.execute(
+            text(
+                """
+            CREATE TRIGGER IF NOT EXISTS frames_fts_ai AFTER INSERT ON frames
+            BEGIN
+                INSERT INTO frames_fts(rowid, object_name, instrume, telescop, filter_name, filename, site_name)
+                VALUES (new.id, new.object_name, new.instrume, new.telescop, new.filter_name, new.filename, new.site_name);
+            END
+            """
+            )
+        )
+        sess.execute(
+            text(
+                """
+            CREATE TRIGGER IF NOT EXISTS frames_fts_ad AFTER DELETE ON frames
+            BEGIN
+                INSERT INTO frames_fts(frames_fts, rowid, object_name, instrume, telescop, filter_name, filename, site_name)
+                VALUES ('delete', old.id, old.object_name, old.instrume, old.telescop, old.filter_name, old.filename, old.site_name);
+            END
+            """
+            )
+        )
+        sess.execute(
+            text(
+                """
+            CREATE TRIGGER IF NOT EXISTS frames_fts_au AFTER UPDATE ON frames
+            BEGIN
+                INSERT INTO frames_fts(frames_fts, rowid, object_name, instrume, telescop, filter_name, filename, site_name)
+                VALUES ('delete', old.id, old.object_name, old.instrume, old.telescop, old.filter_name, old.filename, old.site_name);
+                INSERT INTO frames_fts(rowid, object_name, instrume, telescop, filter_name, filename, site_name)
+                VALUES (new.id, new.object_name, new.instrume, new.telescop, new.filter_name, new.filename, new.site_name);
+            END
+            """
+            )
+        )
+        sess.commit()
+
+    return {"status": "ok", "message": "Database reset complete"}
+
+
+# ---------------------------------------------------------------------------
+# Targets
+# ---------------------------------------------------------------------------
+
+
 @app.get("/api/v1/targets/{target_id}", response_model=TargetSchema)
 def get_target(target_id: int):
     engine, SessionLocal = get_session_local()
@@ -603,6 +900,8 @@ def get_target(target_id: int):
 def get_target_sessions(
     target_id: int,
     camera_id: int | None = Query(None),
+    sort_by: str = Query("date_obs"),
+    sort_order: str = Query("desc"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
 ):
@@ -636,6 +935,10 @@ def get_target_sessions(
         total = q.count()
         pages = (total + page_size - 1) // page_size
 
+        allowed_sort = {"date_obs": ObsSession.date_obs, "total_exposure_h": ObsSession.total_exposure_h, "frame_count": ObsSession.frame_count}
+        order_col = allowed_sort.get(sort_by, ObsSession.date_obs)
+        order_col = order_col.desc() if sort_order == "desc" else order_col.asc()
+
         items = [
             SessionSchema(
                 id=r.id,
@@ -651,7 +954,7 @@ def get_target_sessions(
                 frame_count=r.frame_count,
                 folder_path=r.folder_path,
             )
-            for r in q.order_by(ObsSession.date_obs.desc())
+            for r in q.order_by(order_col)
             .offset((page - 1) * page_size)
             .limit(page_size)
             .all()
@@ -852,10 +1155,12 @@ def list_frames(
     has_coordinates: bool | None = Query(
         None, description="Filter by presence of RA/Dec coordinates"
     ),
+    filename: str | None = Query(None, description="Search in filename (use * for wildcard)"),
+    filepath: str | None = Query(None, description="Search in filepath (use * for wildcard)"),
     sort_by: str = Query("date_obs"),
     sort_order: str = Query("asc"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(100, ge=1, le=1000),
+    page_size: int = Query(100, ge=1, le=10000),
 ):
     engine, SessionLocal = get_session_local()
     with SessionLocal() as session:
@@ -875,6 +1180,19 @@ def list_frames(
         elif has_coordinates is False:
             q = q.filter(Frame.ra_deg.is_(None), Frame.dec_deg.is_(None))
 
+        if filename:
+            raw = filename.replace("\\", "\\\\")
+            like_pattern = raw.replace("_", "\\_").replace("%", "\\%").replace("*", "%").replace("?", "_")
+            if "%" not in like_pattern:
+                like_pattern = f"%{like_pattern}%"
+            q = q.filter(Frame.filename.ilike(like_pattern, escape="\\"))
+        if filepath:
+            raw = filepath.replace("\\", "\\\\")
+            like_pattern = raw.replace("_", "\\_").replace("%", "\\%").replace("*", "%").replace("?", "_")
+            if "%" not in like_pattern:
+                like_pattern = f"%{like_pattern}%"
+            q = q.filter(Frame.filepath.ilike(like_pattern, escape="\\"))
+
         total = q.count()
         pages = (total + page_size - 1) // page_size
 
@@ -891,9 +1209,24 @@ def list_frames(
         )
 
 
+@app.get("/api/v1/frames/{frame_id}", response_model=FrameDetailSchema)
+def get_frame(frame_id: int):
+    """Get full metadata for a single frame."""
+    engine, SessionLocal = get_session_local()
+    with SessionLocal() as session:
+        frame = session.get(Frame, frame_id)
+        if not frame:
+            raise HTTPException(404, "Frame not found")
+        return FrameDetailSchema.model_validate(frame)
+
+
 @app.get("/api/v1/frames/{frame_id}/thumbnail")
-def get_frame_thumbnail(frame_id: int):
-    """Get a JPEG thumbnail for a specific frame."""
+def get_frame_thumbnail(frame_id: int, preview: bool = Query(False)):
+    """Get a JPEG thumbnail for a specific frame.
+    
+    Normal (preview=false): max 200px, quick thumbnail.
+    Preview (preview=true): ~25% of original resolution for the popup viewer.
+    """
     engine, SessionLocal = get_session_local()
     with SessionLocal() as session:
         frame = session.get(Frame, frame_id)
@@ -904,9 +1237,12 @@ def get_frame_thumbnail(frame_id: int):
         if not fp.exists():
             raise HTTPException(status_code=404, detail="File not found on disk")
 
-        from stellashelf.scanner import generate_thumbnail
+        size = 200
+        if preview:
+            raw_w = frame.width or 4000
+            size = max(400, min(raw_w // 4, 2000))
 
-        thumb_bytes = generate_thumbnail(fp)
+        thumb_bytes = generate_thumbnail(fp, size=size)
         if thumb_bytes is None:
             raise HTTPException(status_code=500, detail="Failed to generate thumbnail")
 
@@ -930,17 +1266,15 @@ def get_target_thumbnails(target_id: int, limit: int = Query(6, ge=1, le=20)):
             .all()
         )
 
+        import base64
+
         results = []
         for f in recent_frames:
             fp = Path(f.filepath)
             thumb_url = None
             if fp.exists():
-                from stellashelf.scanner import generate_thumbnail
-
                 thumb_bytes = generate_thumbnail(fp)
                 if thumb_bytes:
-                    import base64
-
                     thumb_url = f"data:image/jpeg;base64,{base64.b64encode(thumb_bytes).decode()}"
 
             results.append(
@@ -955,6 +1289,108 @@ def get_target_thumbnails(target_id: int, limit: int = Query(6, ge=1, le=20)):
             )
 
         return results
+
+
+class FrameDeleteRequest(BaseModel):
+    frame_ids: list[int]
+
+
+@app.post("/api/v1/frames/delete")
+def delete_frames(req: FrameDeleteRequest):
+    """Delete frames by list of IDs. Also recalculates affected session stats."""
+    if not req.frame_ids:
+        raise HTTPException(400, "No frame IDs provided")
+
+    engine, SessionLocal = get_session_local()
+    with SessionLocal() as session:
+        affected_session_ids = set()
+        frames = session.query(Frame).filter(Frame.id.in_(req.frame_ids)).all()
+        if not frames:
+            raise HTTPException(404, "No frames found")
+
+        for f in frames:
+            if f.session_id:
+                affected_session_ids.add(f.session_id)
+
+        session.query(Frame).filter(Frame.id.in_(req.frame_ids)).delete(
+            synchronize_session="fetch"
+        )
+
+        if affected_session_ids:
+            from sqlalchemy import update as sa_update
+
+            for sid in affected_session_ids:
+                frame_stats = (
+                    session.query(
+                        sa_func.count(Frame.id),
+                        sa_func.coalesce(sa_func.sum(Frame.exposure), 0),
+                    )
+                    .filter(Frame.session_id == sid)
+                    .first()
+                )
+                cnt, total_s = frame_stats
+                total_h = (total_s or 0) / 3600.0
+                session.execute(
+                    sa_update(ObsSession)
+                    .where(ObsSession.id == sid)
+                    .values(frame_count=cnt, total_exposure_s=total_s, total_exposure_h=total_h)
+                )
+
+        session.commit()
+
+        _cleanup_orphans(session)
+
+    return {"status": "ok", "deleted": len(req.frame_ids), "affected_sessions": len(affected_session_ids)}
+
+
+def _cleanup_orphans(session):
+    """Delete orphaned sessions (no frames), targets (no sessions), and unused equipment."""
+    # Orphaned sessions
+    orphan_sessions = session.query(ObsSession).filter(
+        ~ObsSession.id.in_(session.query(Frame.session_id).filter(Frame.session_id.isnot(None)))
+    ).all()
+    orphan_session_ids = [s.id for s in orphan_sessions]
+    for s in orphan_sessions:
+        session.delete(s)
+
+    # Orphaned targets
+    orphan_targets = session.query(Target).filter(
+        ~Target.id.in_(session.query(ObsSession.target_id).filter(ObsSession.target_id.isnot(None)))
+    ).all()
+    for t in orphan_targets:
+        session.delete(t)
+
+    # Orphaned cameras
+    orphan_cameras = session.query(Camera).filter(
+        ~Camera.id.in_(session.query(ObsSession.camera_id).filter(ObsSession.camera_id.isnot(None)))
+    ).all()
+    for c in orphan_cameras:
+        session.delete(c)
+
+    # Orphaned telescopes
+    orphan_telescopes = session.query(Telescope).filter(
+        ~Telescope.id.in_(session.query(ObsSession.telescope_id).filter(ObsSession.telescope_id.isnot(None)))
+    ).all()
+    for t in orphan_telescopes:
+        session.delete(t)
+
+    session.flush()
+    return {
+        "sessions": len(orphan_session_ids),
+        "targets": len(orphan_targets),
+        "cameras": len(orphan_cameras),
+        "telescopes": len(orphan_telescopes),
+    }
+
+
+@app.post("/api/v1/db/cleanup-orphans")
+def cleanup_orphans():
+    """Remove orphaned sessions, targets, and equipment without frames."""
+    engine, SessionLocal = get_session_local()
+    with SessionLocal() as session:
+        result = _cleanup_orphans(session)
+        session.commit()
+    return {"status": "ok", **result}
 
 
 # ---------------------------------------------------------------------------
@@ -1116,50 +1552,142 @@ def update_settings(settings: list[SettingSchema]):
 
 @app.post("/api/v1/platesolve")
 def run_platesolve():
-    """Run ASTAP platesolving on all frames without RA/Dec coordinates."""
-    from stellashelf.db import Setting
-    from stellashelf.scanner import platesolve_frame
+    """Start ASTAP platesolving on all frames without RA/Dec coordinates (background task)."""
+    with _platesolve_lock:
+        if _platesolve_state["running"]:
+            raise HTTPException(status_code=409, detail="A platesolve operation is already running")
+        _platesolve_state["running"] = True
+        _platesolve_state["phase"] = "solving"
+        _platesolve_state["solved"] = 0
+        _platesolve_state["failed"] = 0
+        _platesolve_state["error"] = None
+        _platesolve_state["cancelled"] = False
+        _platesolve_state["log"] = []
 
-    engine, SessionLocal = get_session_local()
+    thread = threading.Thread(target=_run_platesolve_task, daemon=True)
+    thread.start()
 
-    # Get ASTAP binary path from settings
-    astap_binary = "astap"
-    with SessionLocal() as sess:
-        setting = sess.query(Setting).filter(Setting.key == "astap_binary").first()
-        if setting and setting.value:
-            astap_binary = setting.value
+    return {"status": "started"}
 
-    solved = 0
-    failed = 0
 
-    with SessionLocal() as sess:
-        unplated = (
-            sess.query(Frame)
-            .filter(Frame.ra_deg.is_(None), Frame.dec_deg.is_(None))
-            .limit(50)
-            .all()
-        )
+@app.get("/api/v1/platesolve/status")
+def platesolve_status():
+    """Get current platesolve progress."""
+    with _platesolve_lock:
+        return dict(_platesolve_state)
 
-        for frame in unplated:
-            fp = Path(frame.filepath)
-            if not fp.exists():
-                continue
-            result = platesolve_frame(fp, astap_binary)
-            if result:
-                frame.ra_deg = result["ra_deg"]
-                frame.dec_deg = result["dec_deg"]
-                solved += 1
-            else:
-                failed += 1
 
-        sess.commit()
+@app.post("/api/v1/platesolve/cancel")
+def cancel_platesolve():
+    """Cancel a running platesolve operation."""
+    with _platesolve_lock:
+        _platesolve_state["cancelled"] = True
+    return {"status": "cancelling"}
 
-    return {
-        "status": "ok",
-        "solved": solved,
-        "failed": failed,
-        "remaining": len(unplated) - solved - failed,
-    }
+
+def _run_platesolve_task():
+    """Background thread task for platesolving."""
+    global _platesolve_state
+    try:
+        engine, SessionLocal = get_session_local()
+
+        astap_binary = "astap_cli"
+        with SessionLocal() as sess:
+            setting = sess.query(Setting).filter(Setting.key == "astap_binary").first()
+            if setting and setting.value:
+                astap_binary = setting.value
+
+        with SessionLocal() as sess:
+            unplated = (
+                sess.query(Frame)
+                .filter(Frame.ra_deg.is_(None), Frame.dec_deg.is_(None))
+                .limit(50)
+                .all()
+            )
+
+        total = len(unplated)
+        solved = 0
+        failed = 0
+        log_entries = []
+
+        with _platesolve_lock:
+            _platesolve_state["total"] = total
+            _platesolve_state["log"] = []
+
+        with SessionLocal() as sess:
+            for _i, frame in enumerate(unplated):
+                # Check for cancellation
+                with _platesolve_lock:
+                    if _platesolve_state.get("cancelled"):
+                        log_entries.append(
+                            {"frame": frame.filename, "status": "cancelled", "detail": "Abgebrochen"}
+                        )
+                        break
+
+                fp = Path(frame.filepath)
+                if not fp.exists():
+                    failed += 1
+                    log_entries.append(
+                        {"frame": frame.filename, "status": "failed", "detail": "Datei nicht gefunden"}
+                    )
+                    with _platesolve_lock:
+                        _platesolve_state["failed"] = failed
+                        _platesolve_state["log"] = list(log_entries)
+                    continue
+
+                ra_hint = frame.ra_deg or None
+                dec_hint = frame.dec_deg or None
+                if ra_hint is None and dec_hint is None and frame.object_name:
+                    from stellashelf.catalog import normalize_object_name
+
+                    norm = normalize_object_name(frame.object_name)
+                    target = sess.query(Target).filter(Target.name == norm).first()
+                    if target and target.ra_deg is not None:
+                        ra_hint = target.ra_deg
+                        dec_hint = target.dec_deg
+
+                result = platesolve_frame(fp, astap_binary, ra_hint=ra_hint, dec_hint=dec_hint)
+                if result:
+                    frame.ra_deg = result["ra_deg"]
+                    frame.dec_deg = result["dec_deg"]
+                    solved += 1
+                    log_entries.append(
+                        {
+                            "frame": frame.filename,
+                            "status": "solved",
+                            "detail": f"RA={result['ra_deg']:.4f}° Dec={result['dec_deg']:.4f}°",
+                        }
+                    )
+                else:
+                    failed += 1
+                    log_entries.append(
+                        {"frame": frame.filename, "status": "failed", "detail": "Keine Lösung gefunden"}
+                    )
+
+                with _platesolve_lock:
+                    _platesolve_state["solved"] = solved
+                    _platesolve_state["failed"] = failed
+                    _platesolve_state["log"] = list(log_entries)
+
+            sess.commit()
+
+        with _platesolve_lock:
+            _platesolve_state["phase"] = "done" if not _platesolve_state.get("cancelled") else "cancelled"
+            _platesolve_state["solved"] = solved
+            _platesolve_state["failed"] = failed
+            _platesolve_state["log"] = log_entries
+            _platesolve_state["running"] = False
+
+    except Exception as e:
+
+        with _platesolve_lock:
+            _platesolve_state["running"] = False
+            _platesolve_state["phase"] = "error"
+            _platesolve_state["error"] = str(e)
+            _platesolve_state["log"] = (
+                _platesolve_state.get("log", [])
+                + [{"frame": "", "status": "error", "detail": str(e)}]
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -1170,13 +1698,13 @@ def run_platesolve():
 FRONTEND_DIR = Path(__file__).resolve().parent.parent.parent / "frontend-vue" / "dist"
 if FRONTEND_DIR.exists():
     app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIR / "assets")), name="assets")
+    if (FRONTEND_DIR / "public").exists():
+        app.mount("/icons", StaticFiles(directory=str(FRONTEND_DIR / "public")), name="public")
 
     @app.get("/", response_class=HTMLResponse)
     @app.get("/{path:path}", response_class=HTMLResponse)
     async def index(path: str = ""):
         # Serve index.html for all non-API, non-asset paths (SPA routing)
-        if path.startswith("api/") or path.startswith("assets/"):
-            from fastapi import HTTPException
-
+        if path.startswith("api/") or path.startswith("assets/") or path.startswith("icons/"):
             raise HTTPException(status_code=404)
         return (FRONTEND_DIR / "index.html").read_text()

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { useApiStore, type Target, type PaginatedResponse } from '@/stores/api'
+import { useApiStore, type Target, type PaginatedResponse, type DuplicateGroup } from '@/stores/api'
 import Pagination from '@/components/Pagination.vue'
 
 const apiStore = useApiStore()
@@ -19,6 +19,11 @@ const objectTypes = ref<string[]>([])
 const constellations = ref<string[]>([])
 const selectedType = ref('')
 const selectedConstellation = ref('')
+
+// Duplicate detection
+const duplicates = ref<DuplicateGroup[]>([])
+const showDuplicates = ref(false)
+const merging = ref<Set<string>>(new Set())
 
 async function loadFilters() {
   const res = await apiStore.fetch<{ object_types: string[]; constellations: string[] }>('/targets/types')
@@ -41,6 +46,30 @@ async function load() {
   totalItems.value = res.total
 }
 
+async function checkDuplicates() {
+  try {
+    duplicates.value = await apiStore.fetch<DuplicateGroup[]>('/targets/duplicates')
+    if (duplicates.value.length > 0) showDuplicates.value = true
+  } catch {
+    // ignore
+  }
+}
+
+async function mergeGroup(canonicalName: string) {
+  merging.value.add(canonicalName)
+  try {
+    await apiStore.post('/targets/merge-group', { canonical_name: canonicalName })
+    // Refresh duplicates and targets list
+    duplicates.value = await apiStore.fetch<DuplicateGroup[]>('/targets/duplicates')
+    if (duplicates.value.length === 0) showDuplicates.value = false
+    load()
+  } catch (e: any) {
+    alert('Fehler beim Zusammenführen: ' + (e.response?.data?.detail || e.message))
+  } finally {
+    merging.value.delete(canonicalName)
+  }
+}
+
 const typeBadgeClass = (type: string | null): string => {
   const map: Record<string, string> = {
     'Galaxy': 'badge-galaxy',
@@ -55,6 +84,7 @@ const typeBadgeClass = (type: string | null): string => {
 
 watch([page, search, sortBy, sortOrder, selectedType, selectedConstellation], load, { immediate: true })
 loadFilters()
+checkDuplicates()
 
 function viewTarget(id: number) {
   router.push({ name: 'target-detail', params: { id } })
@@ -70,6 +100,30 @@ function toggleSortOrder() {
     <div class="page-header">
       <h2>Targets</h2>
       <p>{{ totalItems }} astronomische Objekte</p>
+    </div>
+
+    <div v-if="showDuplicates && duplicates.length" class="duplicate-banner">
+      <span>{{ duplicates.length }} mögliche Duplikat-Gruppe(n) gefunden.</span>
+      <button class="btn btn-sm" @click="showDuplicates = false">Ausblenden</button>
+    </div>
+
+    <div v-if="showDuplicates" class="duplicate-list">
+      <div v-for="group in duplicates" :key="group.canonical_name" class="duplicate-group">
+        <div class="duplicate-group-header">
+          <strong>{{ group.canonical_name }}</strong>
+          <button
+            class="btn btn-sm btn-merge"
+            @click="mergeGroup(group.canonical_name)"
+            :disabled="merging.has(group.canonical_name)"
+          >
+            {{ merging.has(group.canonical_name) ? 'Führe zusammen...' : 'Alle zusammenführen' }}
+          </button>
+        </div>
+        <div v-for="t in group.targets" :key="t.id" class="duplicate-target">
+          <span>{{ t.name }} ({{ t.session_count }} Sessions)</span>
+          <button class="btn btn-sm" @click="viewTarget(t.id)">Öffnen</button>
+        </div>
+      </div>
     </div>
 
     <div class="filters">
@@ -111,11 +165,11 @@ function toggleSortOrder() {
     <table class="data-table">
       <thead>
         <tr>
-          <th>Name</th>
-          <th>Sessions</th>
-          <th>Belichtung</th>
-          <th>Typ</th>
-          <th>Sternbild</th>
+          <th class="sortable" @click="sortBy = 'name'; sortOrder = sortOrder === 'asc' && sortBy === 'name' ? 'desc' : 'asc'">Name {{ sortBy === 'name' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</th>
+          <th class="sortable" @click="sortBy = 'session_count'; sortOrder = sortOrder === 'asc' && sortBy === 'session_count' ? 'desc' : 'asc'">Sessions {{ sortBy === 'session_count' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</th>
+          <th class="sortable" @click="sortBy = 'total_h'; sortOrder = sortOrder === 'asc' && sortBy === 'total_h' ? 'desc' : 'asc'">Belichtung {{ sortBy === 'total_h' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</th>
+          <th class="sortable" @click="sortBy = 'object_type'; sortOrder = sortOrder === 'asc' && sortBy === 'object_type' ? 'desc' : 'asc'">Typ {{ sortBy === 'object_type' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</th>
+          <th class="sortable" @click="sortBy = 'constellation'; sortOrder = sortOrder === 'asc' && sortBy === 'constellation' ? 'desc' : 'asc'">Sternbild {{ sortBy === 'constellation' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</th>
         </tr>
       </thead>
       <tbody>
@@ -137,3 +191,44 @@ function toggleSortOrder() {
     <Pagination :total="totalItems" :page="page" :pages="totalPages" @update:page="page = $event" />
   </div>
 </template>
+
+<style scoped>
+.duplicate-banner {
+  background: rgba(240, 136, 62, 0.1);
+  border: 1px solid var(--accent3);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+.duplicate-list {
+  margin-bottom: 16px;
+}
+.duplicate-group {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 8px;
+}
+.duplicate-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.duplicate-target {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0 0 12px;
+  font-size: 13px;
+}
+.sortable { cursor: pointer; user-select: none; }
+.sortable:hover { color: var(--accent); }
+</style>

@@ -5,14 +5,18 @@
 Open-source tool for cataloging, organizing, and managing deep-sky astrophotography image collections. Scans FITS/XISF headers, groups frames into observation sessions, and provides a modern Vue 3 web interface for browsing your astro archive.
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://opensource.org/licenses/AGPL-3.0)
-[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![CI](https://github.com/TobiaszJ/StellaShelf/actions/workflows/ci.yml/badge.svg)](https://github.com/TobiaszJ/StellaShelf/actions)
 
 ## Features
 
 - **FITS Header Scanner**: Recursively scans directories for FITS files, extracts metadata from headers (OBJECT, EXPOSURE, FILTER, coordinates, etc.)
 - **Automatic Session Grouping**: Groups frames by target + date + camera + telescope + filter
-- **Multi-Software Support**: Handles SGP-compressed FITS (HDU[1] headers), MaximDL, QHY, and other capture software
+- **Object Name Normalization**: M51, m51, M 51 → M 51 — prevents duplicate targets
+- **Target Merging**: Manual merge per-target + auto-merge-all-duplicates with one click
+- **Duplicate Detection**: Automatic detection of targets with the same normalized name
+- **Frame Cleanup**: Search by filename or path (wildcards supported), bulk delete from DB
+- **Orphan Cleanup**: Automatic removal of empty sessions, targets, and unused equipment
 - **SQLite + FTS5**: Serverless database with full-text search, no external dependencies
 - **Vue 3 Web Dashboard**: Modern reactive UI with pagination, filtering, and ECharts visualizations
 - **REST API**: FastAPI backend with pagination, aggregation, and scan management
@@ -97,6 +101,7 @@ frontend-vue/
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
+| `/api/v1/health` | GET | Health check and database path |
 | `/api/v1/dashboard` | GET | Aggregated dashboard data |
 | `/api/v1/search?q=...` | GET | Full-text search via FTS5 |
 | `/api/v1/targets` | GET | List targets (paginated, searchable, filterable by type/constellation) |
@@ -115,7 +120,8 @@ frontend-vue/
 | `/api/v1/stats` | GET | Database statistics |
 | `/api/v1/scan` | POST | Start background FITS scan |
 | `/api/v1/scan/status` | GET | Get scan progress |
-| `/api/v1/platesolve` | POST | Run ASTAP platesolving on unplated frames |
+| `/api/v1/platesolve` | POST | Start ASTAP platesolving on unplated frames |
+| `/api/v1/platesolve/status` | GET | Get platesolve progress |
 | `/api/v1/settings` | GET/POST | Application settings (key/value) |
 
 ## Supported FITS Formats

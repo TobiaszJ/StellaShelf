@@ -13,11 +13,27 @@ const totalPages = ref(1)
 const totalItems = ref(0)
 const statusFilter = ref('')
 const sortBy = ref('date_obs')
+const sortOrder = ref('desc')
 
 function shortPath(path: string | null | undefined): string {
   if (!path) return '-'
   const parts = path.split('/')
   return parts.length > 3 ? '.../' + parts.slice(-3).join('/') : path
+}
+
+function toggleSort(col: string) {
+  if (sortBy.value === col) {
+    sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortBy.value = col
+    sortOrder.value = 'desc'
+  }
+  page.value = 1
+}
+
+function sortIcon(col: string): string {
+  if (sortBy.value !== col) return '↕'
+  return sortOrder.value === 'asc' ? '↑' : '↓'
 }
 
 // Read filter query param from Equipment view navigation
@@ -31,14 +47,14 @@ async function load() {
     page_size: 50,
     status: statusFilter.value || undefined,
     sort_by: sortBy.value,
-    sort_order: 'desc',
+    sort_order: sortOrder.value,
   })
   sessions.value = res.items
   totalPages.value = res.pages
   totalItems.value = res.total
 }
 
-watch([page, statusFilter, sortBy], load, { immediate: true })
+watch([page, statusFilter, sortBy, sortOrder], load, { immediate: true })
 
 </script>
 
@@ -73,12 +89,12 @@ watch([page, statusFilter, sortBy], load, { immediate: true })
       <thead>
         <tr>
           <th>Ziel</th>
-          <th>Datum</th>
+          <th class="sortable" @click="toggleSort('date_obs')">Datum {{ sortIcon('date_obs') }}</th>
           <th>Kamera</th>
           <th>Teleskop</th>
-          <th>Belichtung</th>
+          <th class="sortable" @click="toggleSort('total_exposure_h')">Belichtung {{ sortIcon('total_exposure_h') }}</th>
           <th>Ordner</th>
-          <th>Frames</th>
+          <th class="sortable" @click="toggleSort('frame_count')">Frames {{ sortIcon('frame_count') }}</th>
           <th>Status</th>
         </tr>
       </thead>

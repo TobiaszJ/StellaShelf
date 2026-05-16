@@ -3,7 +3,7 @@
 SQLite with SQLAlchemy ORM + FTS5 full-text search.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy import (
@@ -124,8 +124,10 @@ class Session(Base):
 
     capture_software = Column(String(255), nullable=True)
     observer = Column(String(255), nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now())
-    updated_at = Column(DateTime, default=lambda: datetime.now(), onupdate=lambda: datetime.now())
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at = Column(
+        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+    )
 
     target = relationship("Target", back_populates="sessions")
     camera = relationship("Camera", back_populates="sessions")
@@ -181,11 +183,11 @@ class Frame(Base):
     eccentricity = Column(Float, nullable=True)
     snr = Column(Float, nullable=True)
 
-    file_sha256 = Column(String(64), nullable=True, unique=True)
+    file_sha256 = Column(String(64), nullable=True)
 
     obs_session = relationship("Session", back_populates="frames")
 
-    scanned_at = Column(DateTime, default=lambda: datetime.now())
+    scanned_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
     __table_args__ = (Index("ix_frames_type_object", "frame_type", "object_name"),)
 
@@ -216,7 +218,7 @@ class CalibrationFile(Base):
     parsed_binning = Column(Integer, nullable=True)
     parsed_ccd_temp = Column(Float, nullable=True)
 
-    scanned_at = Column(DateTime, default=lambda: datetime.now())
+    scanned_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class Setting(Base):
@@ -228,30 +230,14 @@ class Setting(Base):
     key = Column(String(128), nullable=False, unique=True, index=True)
     value = Column(Text, nullable=True)
     description = Column(String(255), nullable=True)
-    updated_at = Column(DateTime, default=lambda: datetime.now(), onupdate=lambda: datetime.now())
+    updated_at = Column(
+        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+    )
 
 
 # ---------------------------------------------------------------------------
 # FTS5 full-text search
 # ---------------------------------------------------------------------------
-
-
-# Re-export get_db_path for backwards compatibility (used by cli.py, api.py)
-# get_db_path is imported at the top from stellashelf.config
-
-__all__ = [
-    "Base",
-    "Camera",
-    "Telescope",
-    "Filter",
-    "Target",
-    "Session",
-    "Frame",
-    "CalibrationFile",
-    "Setting",
-    "get_db_path",
-    "init_db",
-]
 
 
 def init_db(db_path: Path | None = None) -> tuple:

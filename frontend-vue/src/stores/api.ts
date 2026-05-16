@@ -97,6 +97,11 @@ export interface ScanState {
   error: string | null
 }
 
+export interface DuplicateGroup {
+  canonical_name: string
+  targets: Array<{ id: number; name: string; session_count: number }>
+}
+
 export interface PaginatedResponse<T> {
   total: number
   page: number
@@ -137,5 +142,10 @@ export const useApiStore = defineStore('api', () => {
     }
   }
 
-  return { loading, error, fetch, post }
+  async function fetchBlob(url: string): Promise<Blob> {
+    const res = await api.get(url, { responseType: 'blob' })
+    return res.data
+  }
+
+  return { loading, error, fetch, post, fetchBlob }
 })

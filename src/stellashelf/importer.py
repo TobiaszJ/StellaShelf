@@ -8,6 +8,7 @@ from pathlib import Path
 
 from sqlalchemy import text
 
+from stellashelf.catalog import normalize_object_name
 from stellashelf.db import CalibrationFile, Camera, Frame, Target, Telescope, init_db
 from stellashelf.db import Session as ObsSession
 from stellashelf.scanner import generate_group_key, scan_directory
@@ -132,15 +133,26 @@ class ImporterService:
 
                 # 3. Handle Target and Session
                 target_id = None
-                obj_name = frame.object_name.strip() if frame.object_name else ""
+                raw_name = frame.object_name.strip() if frame.object_name else ""
+                obj_name = normalize_object_name(raw_name)
 
                 if obj_name and obj_name != "UNKNOWN":
                     if obj_name not in targets_by_name:
-                        target = Target(name=obj_name)
+                        target = Target(name=obj_name, alt_names="")
                         session.add(target)
                         session.flush()
                         targets_by_name[obj_name] = target.id
                     target_id = targets_by_name[obj_name]
+
+                    # Track original name as alias if it differs from normalized form
+                    if raw_name and raw_name != obj_name:
+                        existing = session.query(Target).filter_by(name=obj_name).first()
+                        if existing:
+                            aliases = set()
+                            if existing.alt_names:
+                                aliases = set(existing.alt_names.split(","))
+                            aliases.add(raw_name)
+                            existing.alt_names = ",".join(sorted(aliases))
                 else:
                     if "UNKNOWN" not in targets_by_name:
                         unk = Target(name="UNKNOWN")

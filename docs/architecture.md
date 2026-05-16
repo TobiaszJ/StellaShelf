@@ -5,7 +5,7 @@
 StellaShelf is a three-tier application:
 
 1. **Scanner** — walks the filesystem, reads FITS/XISF headers, populates the database
-2. **API** — FastAPI REST + WebSocket backend serving the database
+2. **API** — FastAPI REST backend serving the database
 3. **UI** — Vue 3 + Vite frontend for browsing, searching, and triggering pipelines
 
 ## Data Model
@@ -131,7 +131,7 @@ Key headers live in the **first extension** (HDU[1]) when the file is gzip-compr
 |---|---|---|
 | Backend | FastAPI | Async, WebSocket, native FITS support via astropy |
 | Database | SQLite + FTS5 | Zero-server, portable, fast enough for personal use |
-| Frontend | Vue 3 + Vite + PrimeVue | Reactive UI, rich table components |
+| Frontend | Vue 3 + Vite + ECharts + Lucide | Reactive UI, charting, icon library |
 | FITS reader | astropy.io.fits | Gold standard, handles compressed FITS |
 | RAW reader | rawpy | Canon CR2/CR3, Nikon NEF |
 | Platesolver | ASTAP CLI | Arm64 + x64, fast, offline |
@@ -153,15 +153,15 @@ src/stellashelf/
 ├── db.py           # SQLAlchemy models (Target, Session, Frame, Camera, Telescope, CalibrationFile, Setting)
 ├── importer.py     # Centralized import pipeline (CLI & API)
 ├── cli.py          # Click CLI commands
-├── api.py          # FastAPI REST API (20+ endpoints) + Vue 3 SPA serving
+├── api.py          # FastAPI REST API (20+ endpoints) + Vue 3 SPA serving + background tasks
 └── config.py       # Centralized configuration (paths, defaults)
 
 frontend-vue/
 └── src/
-    ├── views/      # 11 Vue views: Dashboard, Targets, TargetDetail, Sessions, SessionDetail,
+    ├── views/      # 12 Vue views: Dashboard, Targets, TargetDetail, Sessions, SessionDetail,
     │               #   Equipment, Search, Scan, Settings, Platesolve, Help
-    ├── stores/     # 3 Pinia stores: api (HTTP client), scan (scan progress), theme (dark/light)
-    ├── components/ # Reusable: StatCard, Pagination
+    ├── stores/     # 3 Pinia stores (api, scan, theme)
+    ├── components/ # Reusable components (StatCard, Pagination)
     └── router/     # Vue Router with 11 routes
 ```
 
@@ -190,7 +190,8 @@ The `ImporterService` in `importer.py` centralizes all import logic, eliminating
 | `/api/v1/stats` | GET | Database statistics |
 | `/api/v1/scan` | POST | Start background scan |
 | `/api/v1/scan/status` | GET | Scan progress |
-| `/api/v1/platesolve` | POST | Run ASTAP platesolving |
+| `/api/v1/platesolve` | POST | Start ASTAP platesolving (background task) |
+| `/api/v1/platesolve/status` | GET | Get platesolve progress |
 | `/api/v1/settings` | GET/POST | Application configuration |
 
 ### Frontend Routes
