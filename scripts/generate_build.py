@@ -55,9 +55,18 @@ def main():
 
     BUILD_FILE.write_text(
         f'"""Auto-generated build info. Run scripts/generate_build.py to update."""\n'
-        f'__build__ = {build!r}\n'
+        f'__build__ = "{build}"\n'
     )
-    print(f"Generated {BUILD_FILE} → build={build}")
+
+    # Keep ruff happy
+    import subprocess
+    subprocess.run(
+        ["ruff", "format", str(BUILD_FILE)],
+        capture_output=True,
+        cwd=str(PROJECT_ROOT),
+    )
+
+    print(f"Generated {BUILD_FILE} \u2192 build={build}")
 
 
 if __name__ == "__main__":
