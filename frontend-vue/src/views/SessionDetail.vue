@@ -166,6 +166,7 @@ const metadataEntries = computed(() => {
     ra_deg: 'RA (°)', dec_deg: 'DEC (°)', focal_length_mm: 'Brennweite (mm)',
     site_name: 'Standort', observer: 'Beobachter', creator: 'Software',
     fwhm: 'FWHM', eccentricity: 'Exzentrizität', snr: 'SNR',
+    hfd_median: 'HFD', stars_detected: 'Sterne',
   }
   for (const [key, label] of Object.entries(fields)) {
     const val = (previewFrame.value as any)[key]
@@ -267,6 +268,8 @@ const metadataEntries = computed(() => {
             <th class="sortable" @click="toggleSort('gain')">Gain {{ sortIcon('gain') }}</th>
             <th class="sortable" @click="toggleSort('ccd_temp')">Temp {{ sortIcon('ccd_temp') }}</th>
             <th class="sortable" @click="toggleSort('binning')">Binning {{ sortIcon('binning') }}</th>
+            <th class="sortable" @click="toggleSort('hfd_median')">HFD {{ sortIcon('hfd_median') }}</th>
+            <th class="sortable" @click="toggleSort('stars_detected')">Stars {{ sortIcon('stars_detected') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -278,6 +281,8 @@ const metadataEntries = computed(() => {
             <td>{{ f.gain ?? '-' }}</td>
             <td>{{ f.ccd_temp != null ? f.ccd_temp.toFixed(1) + '°C' : '-' }}</td>
             <td>{{ f.binning }}x{{ f.binning }}</td>
+            <td>{{ f.hfd_median != null ? f.hfd_median.toFixed(1) : '-' }}</td>
+            <td>{{ f.stars_detected ?? '-' }}</td>
           </tr>
         </tbody>
       </table>

@@ -7,6 +7,8 @@ import Scan from '@/views/Scan.vue'
 import Search from '@/views/Search.vue'
 import Settings from '@/views/Settings.vue'
 import Platesolve from '@/views/Platesolve.vue'
+import Analyse from '@/views/Analyse.vue'
+import Identify from '@/views/Identify.vue'
 import Help from '@/views/Help.vue'
 import TargetDetail from '@/views/TargetDetail.vue'
 import SessionDetail from '@/views/SessionDetail.vue'
@@ -23,6 +25,8 @@ const router = createRouter({
     { path: '/search', name: 'search', component: Search },
     { path: '/settings', name: 'settings', component: Settings },
     { path: '/platesolve', name: 'platesolve', component: Platesolve },
+    { path: '/analyse', name: 'analyse', component: Analyse },
+    { path: '/identify', name: 'identify', component: Identify },
     { path: '/help', name: 'help', component: Help },
     { path: '/scan', name: 'scan', component: Scan },
   ],

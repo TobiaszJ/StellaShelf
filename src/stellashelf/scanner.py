@@ -153,6 +153,8 @@ class ScannedFrame:
     site_name: str = ""
     observer: str = ""
     creator: str = ""
+    hfd_median: float | None = None
+    stars_detected: int | None = None
     file_sha256: str = ""
     errors: list[str] = field(default_factory=list)
 
@@ -527,6 +529,48 @@ def generate_thumbnail(filepath: Path, size: int = 200) -> bytes | None:
             buf = io.BytesIO()
             img.save(buf, format="JPEG", quality=85)
             return buf.getvalue()
+    except Exception:
+        return None
+
+
+def analyse_frame(
+    filepath: Path,
+    astap_binary: str = "astap_cli",
+    snr_minimum: int = 30,
+    timeout: int = 60,
+) -> dict | None:
+    """Run ASTAP CLI -analyse on a FITS file to extract HFD and star count.
+
+    Args:
+        filepath: Path to the FITS file.
+        astap_binary: Path to the ASTAP executable (CLI version).
+        snr_minimum: Minimum SNR for star detection.
+        timeout: Max seconds to wait for ASTAP.
+
+    Returns:
+        Dictionary with 'hfd_median' and 'stars_detected' on success, or None.
+    """
+    import subprocess
+
+    try:
+        cmd = [astap_binary, "-f", str(filepath), "-analyse", str(snr_minimum)]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+
+        if result.returncode != 0:
+            return None
+
+        hfd_match = re.search(r"HFD_MEDIAN=([\d.]+)", result.stdout)
+        stars_match = re.search(r"STARS=(\d+)", result.stdout)
+
+        if hfd_match and stars_match:
+            return {
+                "hfd_median": float(hfd_match.group(1)),
+                "stars_detected": int(stars_match.group(1)),
+            }
+
+        return None
+    except subprocess.TimeoutExpired:
+        return None
     except Exception:
         return None
 

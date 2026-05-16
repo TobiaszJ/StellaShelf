@@ -63,3 +63,38 @@ The core scanning, database, API infrastructure, and data management are operati
 - [ ] Performance optimization for large collections (10k+)
 - [ ] RAW format support (CR2, NEF, ARW)
 - [ ] Docker deployment configuration
+
+### Milestone 7 — Object Identification
+
+- [x] OpenNGC catalog integration (NGC.csv + addendum.csv)
+- [ ] FOV-based dominant object lookup (size-weighted)
+- [ ] Background identify task with progress
+- [ ] Auto-create targets from identified objects
+
+## Ideenspeicher
+
+> Ideen die zu einem späteren Zeitpunkt nützlich sein könnten, aber aktuell nicht priorisiert sind.
+
+### SIMBAD TAP API als Fallback-Lookup
+Falls der lokale NGC/IC-OpenNGC-Katalog kein passendes Objekt findet, könnte eine **SIMBAD TAP Cone-Search** (HTTP POST) als Online-Fallback dienen. SIMBAD sortiert nach `nbref DESC` (Anzahl wissenschaftlicher Referenzen), sodass das prominenteste Objekt im Suchfeld gefunden wird.
+
+- Endpoint: `http://simbad.cds.unistra.fr/simbad/sim-tap/sync`
+- Keine zusätzlichen Dependencies (stdlib `urllib` reicht)
+- Ca. 50-300ms pro Query
+- Rate-Limit: ~5-10 req/s
+- Abdeckung: Millionen Objekte (nicht nur NGC/IC)
+- Vorteil: Findet auch Sharpless, LDN, Barnard, etc.
+
+Python-Beispiel:
+```python
+import urllib.request, urllib.parse, json
+query = f"""SELECT TOP 1 main_id, ra, dec, otype, nbref,
+DISTANCE(POINT('ICRS', ra, dec), POINT('ICRS', {ra_deg}, {dec_deg})) AS dist
+FROM basic
+WHERE CONTAINS(POINT('ICRS', ra, dec), CIRCLE('ICRS', {ra_deg}, {dec_deg}, 0.5))=1
+ORDER BY nbref DESC"""
+data = urllib.parse.urlencode({"REQUEST":"doQuery","LANG":"ADQL","FORMAT":"json","QUERY":query}).encode()
+req = urllib.request.Request("http://simbad.cds.unistra.fr/simbad/sim-tap/sync", data=data)
+with urllib.request.urlopen(req, timeout=15) as resp:
+    result = json.loads(resp.read())
+```

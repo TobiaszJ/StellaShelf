@@ -1,14 +1,18 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { RouterView, RouterLink } from 'vue-router'
-import { Telescope, Target, Camera, FolderOpen, ScanLine, Search, Settings as SettingsIcon, HelpCircle, Globe, Sun, Moon } from 'lucide-vue-next'
+import { Telescope, Target, Camera, FolderOpen, ScanLine, Search, Settings as SettingsIcon, HelpCircle, Globe, Sun, Moon, Activity } from 'lucide-vue-next'
 import { useScanStore } from '@/stores/scan'
 import { usePlatesolveStore } from '@/stores/platesolve'
+import { useAnalyseStore } from '@/stores/analyse'
+import { useIdentifyStore } from '@/stores/identify'
 import { useThemeStore } from '@/stores/theme'
 import { useApiStore } from '@/stores/api'
 
 const scanStore = useScanStore()
 const platesolveStore = usePlatesolveStore()
+const analyseStore = useAnalyseStore()
+const identifyStore = useIdentifyStore()
 const themeStore = useThemeStore()
 const apiStore = useApiStore()
 
@@ -39,6 +43,16 @@ if (scanStore.state.running) {
 platesolveStore.fetchStatus()
 if (platesolveStore.state.running) {
   platesolveStore.startPolling()
+}
+
+analyseStore.fetchStatus()
+if (analyseStore.state.running) {
+  analyseStore.startPolling()
+}
+
+identifyStore.fetchStatus()
+if (identifyStore.state.running) {
+  identifyStore.startPolling()
 }
 
 function toggleTheme() {
@@ -92,6 +106,14 @@ function toggleTheme() {
           <Globe :size="18" />
           Platesolving
         </RouterLink>
+        <RouterLink to="/analyse" class="nav-item">
+          <Activity :size="18" />
+          Analyse
+        </RouterLink>
+        <RouterLink to="/identify" class="nav-item">
+          <Target :size="18" />
+          Identifizieren
+        </RouterLink>
         <RouterLink to="/help" class="nav-item">
           <HelpCircle :size="18" />
           Hilfe
@@ -125,6 +147,26 @@ function toggleTheme() {
           <div class="progress-bar-fill" :style="{ width: platesolveStore.progress + '%', background: 'linear-gradient(90deg, var(--accent2), var(--accent))' }"></div>
         </div>
         <span class="scan-pct">{{ platesolveStore.progress }}%</span>
+      </div>
+
+      <!-- Analyse Banner -->
+      <div v-if="analyseStore.state.running" class="scan-banner">
+        <Activity :size="16" style="color: var(--accent2)" />
+        <span class="scan-text">{{ analyseStore.phaseLabel }}</span>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" :style="{ width: analyseStore.progress + '%', background: 'linear-gradient(90deg, var(--accent), var(--accent2))' }"></div>
+        </div>
+        <span class="scan-pct">{{ analyseStore.progress }}%</span>
+      </div>
+
+      <!-- Identify Banner -->
+      <div v-if="identifyStore.state.running" class="scan-banner">
+        <Target :size="16" style="color: var(--accent)" />
+        <span class="scan-text">{{ identifyStore.phaseLabel }}</span>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" :style="{ width: identifyStore.progress + '%', background: 'linear-gradient(90deg, var(--accent2), var(--accent))' }"></div>
+        </div>
+        <span class="scan-pct">{{ identifyStore.progress }}%</span>
       </div>
 
       <main class="content-area">

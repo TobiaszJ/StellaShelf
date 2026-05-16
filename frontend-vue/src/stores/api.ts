@@ -43,6 +43,8 @@ export interface Frame {
   ccd_temp: number | null
   binning: number
   date_obs: string | null
+  hfd_median: number | null
+  stars_detected: number | null
 }
 
 export interface Camera {

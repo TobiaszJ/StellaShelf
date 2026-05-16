@@ -183,6 +183,9 @@ class Frame(Base):
     eccentricity = Column(Float, nullable=True)
     snr = Column(Float, nullable=True)
 
+    hfd_median = Column(Float, nullable=True)
+    stars_detected = Column(Integer, nullable=True)
+
     file_sha256 = Column(String(64), nullable=True)
 
     obs_session = relationship("Session", back_populates="frames")

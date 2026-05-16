@@ -18,11 +18,13 @@ from sqlalchemy import func as sa_func
 from sqlalchemy import text
 
 from stellashelf import __build__, __version__
+from stellashelf.catalog import normalize_object_name
 from stellashelf.config import DEFAULT_DB_PATH
 from stellashelf.db import CalibrationFile, Camera, Frame, Setting, Target, Telescope, init_db
 from stellashelf.db import Session as ObsSession
 from stellashelf.importer import ImporterService
-from stellashelf.scanner import generate_thumbnail, platesolve_frame
+from stellashelf.scanner import analyse_frame, generate_thumbnail, platesolve_frame
+from stellashelf.skylookup import compute_search_radius, find_dominant_object, resolve_target_name
 
 # ---------------------------------------------------------------------------
 # App initialization
@@ -91,6 +93,30 @@ _platesolve_state: dict = {
     "running": False,
     "total": 0,
     "solved": 0,
+    "failed": 0,
+    "phase": "idle",
+    "error": None,
+    "cancelled": False,
+    "log": [],
+}
+
+_analyse_lock = threading.Lock()
+_analyse_state: dict = {
+    "running": False,
+    "total": 0,
+    "analysed": 0,
+    "failed": 0,
+    "phase": "idle",
+    "error": None,
+    "cancelled": False,
+    "log": [],
+}
+
+_identify_lock = threading.Lock()
+_identify_state: dict = {
+    "running": False,
+    "total": 0,
+    "identified": 0,
     "failed": 0,
     "phase": "idle",
     "error": None,
@@ -187,6 +213,8 @@ class FrameSchema(BaseModel):
     ccd_temp: float | None
     binning: int
     date_obs: datetime | None
+    hfd_median: float | None = None
+    stars_detected: int | None = None
 
 
 class FrameDetailSchema(FrameSchema):
@@ -1766,6 +1794,304 @@ def _run_platesolve_task():
             _platesolve_state["phase"] = "error"
             _platesolve_state["error"] = str(e)
             _platesolve_state["log"] = _platesolve_state.get("log", []) + [
+                {"frame": "", "status": "error", "detail": str(e)}
+            ]
+
+
+# ---------------------------------------------------------------------------
+# Frame quality analysis (HFD, stars)
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/v1/analyse")
+def run_analyse():
+    """Start ASTAP analysis on all LIGHT frames without HFD data (background task)."""
+    with _analyse_lock:
+        if _analyse_state["running"]:
+            raise HTTPException(status_code=409, detail="An analysis operation is already running")
+        _analyse_state["running"] = True
+        _analyse_state["phase"] = "analysing"
+        _analyse_state["analysed"] = 0
+        _analyse_state["failed"] = 0
+        _analyse_state["error"] = None
+        _analyse_state["cancelled"] = False
+        _analyse_state["log"] = []
+
+    thread = threading.Thread(target=_run_analyse_task, daemon=True)
+    thread.start()
+
+    return {"status": "started"}
+
+
+@app.get("/api/v1/analyse/status")
+def analyse_status():
+    """Get current analysis progress."""
+    with _analyse_lock:
+        return dict(_analyse_state)
+
+
+@app.post("/api/v1/analyse/cancel")
+def cancel_analyse():
+    """Cancel a running analysis operation."""
+    with _analyse_lock:
+        _analyse_state["cancelled"] = True
+    return {"status": "cancelling"}
+
+
+def _run_analyse_task():
+    """Background thread task for frame quality analysis."""
+    global _analyse_state
+    try:
+        engine, SessionLocal = get_session_local()
+
+        astap_binary = "astap_cli"
+        with SessionLocal() as sess:
+            setting = sess.query(Setting).filter(Setting.key == "astap_binary").first()
+            if setting and setting.value:
+                astap_binary = setting.value
+
+            unanalysed = (
+                sess.query(Frame)
+                .filter(Frame.frame_type == "LIGHT", Frame.hfd_median.is_(None))
+                .all()
+            )
+
+            total = len(unanalysed)
+            analysed = 0
+            failed = 0
+            log_entries = []
+
+            with _analyse_lock:
+                _analyse_state["total"] = total
+                _analyse_state["log"] = []
+
+            for _i, frame in enumerate(unanalysed):
+                with _analyse_lock:
+                    if _analyse_state.get("cancelled"):
+                        log_entries.append(
+                            {"frame": frame.filename, "status": "cancelled", "detail": "Cancelled"}
+                        )
+                        break
+
+                fp = Path(frame.filepath)
+                if not fp.exists():
+                    failed += 1
+                    log_entries.append(
+                        {"frame": frame.filename, "status": "failed", "detail": "File not found"}
+                    )
+                    with _analyse_lock:
+                        _analyse_state["failed"] = failed
+                        _analyse_state["log"] = list(log_entries)
+                    continue
+
+                result = analyse_frame(fp, astap_binary)
+                if result:
+                    frame.hfd_median = result["hfd_median"]
+                    frame.stars_detected = result["stars_detected"]
+                    analysed += 1
+                    log_entries.append(
+                        {
+                            "frame": frame.filename,
+                            "status": "analysed",
+                            "detail": f"HFD={result['hfd_median']:.1f} stars={result['stars_detected']}",
+                        }
+                    )
+                else:
+                    failed += 1
+                    log_entries.append(
+                        {"frame": frame.filename, "status": "failed", "detail": "Analysis failed"}
+                    )
+
+                with _analyse_lock:
+                    _analyse_state["analysed"] = analysed
+                    _analyse_state["failed"] = failed
+                    _analyse_state["log"] = list(log_entries)
+
+            sess.commit()
+
+        with _analyse_lock:
+            _analyse_state["phase"] = "done" if not _analyse_state.get("cancelled") else "cancelled"
+            _analyse_state["analysed"] = analysed
+            _analyse_state["failed"] = failed
+            _analyse_state["log"] = log_entries
+            _analyse_state["running"] = False
+
+    except Exception as e:
+        with _analyse_lock:
+            _analyse_state["running"] = False
+            _analyse_state["phase"] = "error"
+            _analyse_state["error"] = str(e)
+            _analyse_state["log"] = _analyse_state.get("log", []) + [
+                {"frame": "", "status": "error", "detail": str(e)}
+            ]
+
+
+# ---------------------------------------------------------------------------
+# Object identification (reverse sky lookup)
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/v1/identify")
+def run_identify():
+    """Identify dominant deep-sky objects for all LIGHT frames with RA/Dec."""
+    with _identify_lock:
+        if _identify_state["running"]:
+            raise HTTPException(status_code=409, detail="An identify operation is already running")
+        _identify_state["running"] = True
+        _identify_state["phase"] = "identifying"
+        _identify_state["identified"] = 0
+        _identify_state["failed"] = 0
+        _identify_state["error"] = None
+        _identify_state["cancelled"] = False
+        _identify_state["log"] = []
+
+    thread = threading.Thread(target=_run_identify_task, daemon=True)
+    thread.start()
+    return {"status": "started"}
+
+
+@app.get("/api/v1/identify/status")
+def identify_status():
+    with _identify_lock:
+        return dict(_identify_state)
+
+
+@app.post("/api/v1/identify/cancel")
+def cancel_identify():
+    with _identify_lock:
+        _identify_state["cancelled"] = True
+    return {"status": "cancelling"}
+
+
+def _run_identify_task():
+    """Background task: identify all LIGHT frames with RA/Dec."""
+    global _identify_state
+    try:
+        engine, SessionLocal = get_session_local()
+        with SessionLocal() as sess:
+            frames = (
+                sess.query(Frame)
+                .filter(
+                    Frame.frame_type == "LIGHT",
+                    Frame.ra_deg.isnot(None),
+                    Frame.dec_deg.isnot(None),
+                )
+                .all()
+            )
+
+            total = len(frames)
+            identified = 0
+            failed = 0
+            log_entries = []
+
+            with _identify_lock:
+                _identify_state["total"] = total
+                _identify_state["log"] = []
+
+            for frame in frames:
+                with _identify_lock:
+                    if _identify_state.get("cancelled"):
+                        log_entries.append(
+                            {"frame": frame.filename, "status": "cancelled", "detail": "Cancelled"}
+                        )
+                        break
+
+                radius = compute_search_radius(
+                    frame.width,
+                    frame.height,
+                    frame.pixel_size_um,
+                    frame.focal_length_mm,
+                )
+
+                obj = find_dominant_object(frame.ra_deg, frame.dec_deg, radius)
+                if not obj:
+                    failed += 1
+                    log_entries.append(
+                        {
+                            "frame": frame.filename,
+                            "status": "failed",
+                            "detail": "No object found in field",
+                        }
+                    )
+                    with _identify_lock:
+                        _identify_state["failed"] = failed
+                        _identify_state["log"] = list(log_entries)
+                    continue
+
+                target_name = resolve_target_name(obj)
+                norm_name = normalize_object_name(target_name)
+                if not norm_name:
+                    norm_name = target_name.upper().strip()
+
+                existing = sess.query(Target).filter(Target.name == norm_name).first()
+                if existing:
+                    target = existing
+                    if obj["common_names"]:
+                        existing_names = set(
+                            n.strip() for n in (target.alt_names or "").split(",") if n.strip()
+                        )
+                        to_add = []
+                        for alt in [obj["name"], obj["common_names"]]:
+                            if alt and alt.upper() not in existing_names:
+                                to_add.append(alt)
+                        if to_add:
+                            existing_names.update(to_add)
+                            target.alt_names = ",".join(sorted(existing_names))
+                else:
+                    alt_names = ",".join(
+                        sorted(
+                            n for n in [obj["name"], obj["common_names"]] if n and n != norm_name
+                        )
+                    )
+                    target = Target(
+                        name=norm_name,
+                        alt_names=alt_names or None,
+                        object_type=obj["type"],
+                        constellation=obj["constellation"],
+                        ra_deg=obj["ra_deg"],
+                        dec_deg=obj["dec_deg"],
+                    )
+                    sess.add(target)
+                    sess.flush()
+
+                frame.object_name = norm_name
+
+                if frame.session_id:
+                    sess.query(ObsSession).filter(ObsSession.id == frame.session_id).update(
+                        {"target_id": target.id}
+                    )
+
+                identified += 1
+                log_entries.append(
+                    {
+                        "frame": frame.filename,
+                        "status": "identified",
+                        "detail": f"{norm_name} ({target_name})",
+                    }
+                )
+
+                with _identify_lock:
+                    _identify_state["identified"] = identified
+                    _identify_state["failed"] = failed
+                    _identify_state["log"] = list(log_entries)
+
+            sess.commit()
+
+        with _identify_lock:
+            _identify_state["phase"] = (
+                "done" if not _identify_state.get("cancelled") else "cancelled"
+            )
+            _identify_state["identified"] = identified
+            _identify_state["failed"] = failed
+            _identify_state["log"] = log_entries
+            _identify_state["running"] = False
+
+    except Exception as e:
+        with _identify_lock:
+            _identify_state["running"] = False
+            _identify_state["phase"] = "error"
+            _identify_state["error"] = str(e)
+            _identify_state["log"] = _identify_state.get("log", []) + [
                 {"frame": "", "status": "error", "detail": str(e)}
             ]
 
