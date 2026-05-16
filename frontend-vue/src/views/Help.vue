@@ -31,19 +31,6 @@
     </div>
 
     <div class="card">
-      <h3>Tastenkürzel</h3>
-      <table class="data-table">
-        <thead><tr><th>Aktion</th><th>Kürzel</th></tr></thead>
-        <tbody>
-          <tr><td>Dashboard</td><td><code class="key">Strg + 1</code></td></tr>
-          <tr><td>Targets</td><td><code class="key">Strg + 2</code></td></tr>
-          <tr><td>Sessions</td><td><code class="key">Strg + 3</code></td></tr>
-          <tr><td>Suche</td><td><code class="key">Strg + K</code></td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="card">
       <h3>Datenbank</h3>
       <p style="color: var(--text-muted); line-height: 1.7;">
         Die Datenbank wird standardmäßig unter <code>~/.stellashelf/stellashelf.db</code> gespeichert.

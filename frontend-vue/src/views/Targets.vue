@@ -162,31 +162,33 @@ function toggleSortOrder() {
       </div>
     </div>
 
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th class="sortable" @click="sortBy = 'name'; sortOrder = sortOrder === 'asc' && sortBy === 'name' ? 'desc' : 'asc'">Name {{ sortBy === 'name' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</th>
-          <th class="sortable" @click="sortBy = 'session_count'; sortOrder = sortOrder === 'asc' && sortBy === 'session_count' ? 'desc' : 'asc'">Sessions {{ sortBy === 'session_count' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</th>
-          <th class="sortable" @click="sortBy = 'total_h'; sortOrder = sortOrder === 'asc' && sortBy === 'total_h' ? 'desc' : 'asc'">Belichtung {{ sortBy === 'total_h' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</th>
-          <th class="sortable" @click="sortBy = 'object_type'; sortOrder = sortOrder === 'asc' && sortBy === 'object_type' ? 'desc' : 'asc'">Typ {{ sortBy === 'object_type' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</th>
-          <th class="sortable" @click="sortBy = 'constellation'; sortOrder = sortOrder === 'asc' && sortBy === 'constellation' ? 'desc' : 'asc'">Sternbild {{ sortBy === 'constellation' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="t in targets" :key="t.id" class="clickable" @click="viewTarget(t.id)">
-          <td><strong>{{ t.name }}</strong></td>
-          <td>{{ t.session_count }}</td>
-          <td>{{ t.total_exposure_h }}h</td>
-          <td>
-            <span v-if="t.object_type" :class="['badge', typeBadgeClass(t.object_type)]">
-              {{ t.object_type }}
-            </span>
-            <span v-else class="text-faint">-</span>
-          </td>
-          <td>{{ t.constellation || '-' }}</td>
-        </tr>
-      </tbody>
-    </table>
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th class="sortable" @click="sortBy = 'name'; sortOrder = sortOrder === 'asc' && sortBy === 'name' ? 'desc' : 'asc'">Name {{ sortBy === 'name' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</th>
+            <th class="sortable" @click="sortBy = 'session_count'; sortOrder = sortOrder === 'asc' && sortBy === 'session_count' ? 'desc' : 'asc'">Sessions {{ sortBy === 'session_count' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</th>
+            <th class="sortable" @click="sortBy = 'total_h'; sortOrder = sortOrder === 'asc' && sortBy === 'total_h' ? 'desc' : 'asc'">Belichtung {{ sortBy === 'total_h' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</th>
+            <th class="sortable" @click="sortBy = 'object_type'; sortOrder = sortOrder === 'asc' && sortBy === 'object_type' ? 'desc' : 'asc'">Typ {{ sortBy === 'object_type' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</th>
+            <th class="sortable" @click="sortBy = 'constellation'; sortOrder = sortOrder === 'asc' && sortBy === 'constellation' ? 'desc' : 'asc'">Sternbild {{ sortBy === 'constellation' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="t in targets" :key="t.id" class="clickable" @click="viewTarget(t.id)">
+            <td><strong>{{ t.name }}</strong></td>
+            <td>{{ t.session_count }}</td>
+            <td>{{ t.total_exposure_h }}h</td>
+            <td>
+              <span v-if="t.object_type" :class="['badge', typeBadgeClass(t.object_type)]">
+                {{ t.object_type }}
+              </span>
+              <span v-else class="text-faint">-</span>
+            </td>
+            <td>{{ t.constellation || '-' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
     <Pagination :total="totalItems" :page="page" :pages="totalPages" @update:page="page = $event" />
   </div>

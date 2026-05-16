@@ -61,6 +61,20 @@ def get_session_local():
 
 app = FastAPI(title="StellaShelf", version=__version__)
 
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    import logging
+
+    logging.exception("500 error on %s %s", request.method, request.url.path)
+    from fastapi.responses import JSONResponse
+
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Internal server error: {exc}"},
+    )
+
+
 _cors_origins = os.environ.get("STELLASHELF_CORS_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
@@ -86,6 +100,7 @@ _scan_state: dict = {
     "current_file": "",
     "phase": "idle",
     "error": None,
+    "cancelled": False,
 }
 
 _platesolve_lock = threading.Lock()
@@ -142,6 +157,12 @@ def _run_scan_task(root: Path, recursive: bool):
     """Background thread task: delegates scan and import to ImporterService."""
     global _scan_state
     try:
+        with _scan_lock:
+            if _scan_state.get("cancelled"):
+                _scan_state["phase"] = "cancelled"
+                _scan_state["running"] = False
+                return
+
         importer = ImporterService(_db_path)
         progress_cb = _make_scan_progress_callback()
 
@@ -149,16 +170,37 @@ def _run_scan_task(root: Path, recursive: bool):
             _scan_state["phase"] = "scanning"
             _scan_state["running"] = True
 
-        stats = importer.import_from_path(root, recursive=recursive, progress_callback=progress_cb)
+        # Wrap progress callback to check cancel before each frame
+        orig_cb = progress_cb
+
+        def cancel_aware_cb(processed: int, total: int, current_file: Path):
+            with _scan_lock:
+                if _scan_state.get("cancelled"):
+                    raise RuntimeError("Scan cancelled by user")
+            orig_cb(processed, total, current_file)
+
+        stats = importer.import_from_path(
+            root, recursive=recursive, progress_callback=cancel_aware_cb
+        )
 
         with _scan_lock:
-            _scan_state["phase"] = "done"
+            _scan_state["phase"] = "done" if not _scan_state.get("cancelled") else "cancelled"
             _scan_state["imported"] = stats["imported"]
             _scan_state["skipped"] = stats["skipped"]
             _scan_state["calibration_files"] = stats["calibration_files"]
             _scan_state["running"] = False
             _scan_state["error"] = None
 
+    except RuntimeError as e:
+        if "cancelled" in str(e):
+            with _scan_lock:
+                _scan_state["running"] = False
+                _scan_state["phase"] = "cancelled"
+        else:
+            with _scan_lock:
+                _scan_state["running"] = False
+                _scan_state["phase"] = "error"
+                _scan_state["error"] = str(e)
     except Exception as e:
         with _scan_lock:
             _scan_state["running"] = False
@@ -179,6 +221,7 @@ class TargetSchema(BaseModel):
     constellation: str | None = None
     ra_deg: float | None = None
     dec_deg: float | None = None
+    alt_names: str | None = None
     session_count: int = 0
     total_exposure_h: float = 0
 
@@ -419,6 +462,7 @@ def start_scan(request: ScanRequest):
         _scan_state["current_file"] = "Initializing..."
         _scan_state["phase"] = "scanning"
         _scan_state["error"] = None
+        _scan_state["cancelled"] = False
 
     thread = threading.Thread(
         target=_run_scan_task, args=(resolved, request.recursive), daemon=True
@@ -433,6 +477,14 @@ def scan_status():
     """Get current scan progress."""
     with _scan_lock:
         return dict(_scan_state)
+
+
+@app.post("/api/v1/scan/cancel")
+def cancel_scan():
+    """Cancel a running scan operation."""
+    with _scan_lock:
+        _scan_state["cancelled"] = True
+    return {"status": "cancelling"}
 
 
 # ---------------------------------------------------------------------------
@@ -1333,7 +1385,12 @@ def get_frame_thumbnail(frame_id: int, preview: bool = Query(False)):
 
         thumb_bytes = generate_thumbnail(fp, size=size)
         if thumb_bytes is None:
-            raise HTTPException(status_code=500, detail="Failed to generate thumbnail")
+            import logging
+
+            logging.warning("Failed to generate thumbnail for %s", fp)
+            raise HTTPException(
+                status_code=404, detail="Datei kann nicht als Vorschaubild gelesen werden"
+            )
 
         return Response(content=thumb_bytes, media_type="image/jpeg")
 
@@ -1425,75 +1482,80 @@ def delete_frames(req: FrameDeleteRequest):
 
         session.commit()
 
-        _cleanup_orphans(session)
+        orphan_stats = _cleanup_orphans(session)
+        session.commit()
 
     return {
         "status": "ok",
         "deleted": len(req.frame_ids),
         "affected_sessions": len(affected_session_ids),
+        "orphaned": orphan_stats,
     }
 
 
 def _cleanup_orphans(session):
     """Delete orphaned sessions (no frames), targets (no sessions), and unused equipment."""
+    result = {"sessions": 0, "targets": 0, "cameras": 0, "telescopes": 0}
+
     # Orphaned sessions
-    orphan_sessions = (
-        session.query(ObsSession)
-        .filter(
-            ~ObsSession.id.in_(session.query(Frame.session_id).filter(Frame.session_id.isnot(None)))
+    orphan_sid = [
+        r[0]
+        for r in session.execute(
+            text(
+                "SELECT id FROM sessions WHERE id NOT IN (SELECT COALESCE(session_id,0) FROM frames)"
+            )
+        ).fetchall()
+    ]
+    if orphan_sid:
+        session.execute(
+            text(f"DELETE FROM sessions WHERE id IN ({','.join(map(str, orphan_sid))})")
         )
-        .all()
-    )
-    orphan_session_ids = [s.id for s in orphan_sessions]
-    for s in orphan_sessions:
-        session.delete(s)
+    result["sessions"] = len(orphan_sid)
 
     # Orphaned targets
-    orphan_targets = (
-        session.query(Target)
-        .filter(
-            ~Target.id.in_(
-                session.query(ObsSession.target_id).filter(ObsSession.target_id.isnot(None))
+    orphan_tid = [
+        r[0]
+        for r in session.execute(
+            text(
+                "SELECT id FROM targets WHERE id NOT IN (SELECT COALESCE(target_id,0) FROM sessions)"
             )
-        )
-        .all()
-    )
-    for t in orphan_targets:
-        session.delete(t)
+        ).fetchall()
+    ]
+    if orphan_tid:
+        session.execute(text(f"DELETE FROM targets WHERE id IN ({','.join(map(str, orphan_tid))})"))
+    result["targets"] = len(orphan_tid)
 
-    # Orphaned cameras
-    orphan_cameras = (
-        session.query(Camera)
-        .filter(
-            ~Camera.id.in_(
-                session.query(ObsSession.camera_id).filter(ObsSession.camera_id.isnot(None))
+    # Orphaned cameras (delete calibration files first, then cameras)
+    orphan_cid = [
+        r[0]
+        for r in session.execute(
+            text(
+                "SELECT id FROM cameras WHERE id NOT IN (SELECT COALESCE(camera_id,0) FROM sessions)"
             )
-        )
-        .all()
-    )
-    for c in orphan_cameras:
-        session.delete(c)
+        ).fetchall()
+    ]
+    if orphan_cid:
+        cids = ",".join(map(str, orphan_cid))
+        session.execute(text(f"DELETE FROM calibration_files WHERE camera_id IN ({cids})"))
+        session.execute(text(f"DELETE FROM cameras WHERE id IN ({cids})"))
+    result["cameras"] = len(orphan_cid)
 
     # Orphaned telescopes
-    orphan_telescopes = (
-        session.query(Telescope)
-        .filter(
-            ~Telescope.id.in_(
-                session.query(ObsSession.telescope_id).filter(ObsSession.telescope_id.isnot(None))
+    orphan_telid = [
+        r[0]
+        for r in session.execute(
+            text(
+                "SELECT id FROM telescopes WHERE id NOT IN (SELECT COALESCE(telescope_id,0) FROM sessions)"
             )
+        ).fetchall()
+    ]
+    if orphan_telid:
+        session.execute(
+            text(f"DELETE FROM telescopes WHERE id IN ({','.join(map(str, orphan_telid))})")
         )
-        .all()
-    )
-    for t in orphan_telescopes:
-        session.delete(t)
+    result["telescopes"] = len(orphan_telid)
 
-    session.flush()
-    return {
-        "sessions": len(orphan_session_ids),
-        "targets": len(orphan_targets),
-        "cameras": len(orphan_cameras),
-        "telescopes": len(orphan_telescopes),
-    }
+    return result
 
 
 @app.post("/api/v1/db/cleanup-orphans")

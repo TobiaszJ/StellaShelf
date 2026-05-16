@@ -11,6 +11,7 @@ export interface Target {
   constellation: string | null
   ra_deg: number | null
   dec_deg: number | null
+  alt_names: string | null
   session_count: number
   total_exposure_h: number
 }

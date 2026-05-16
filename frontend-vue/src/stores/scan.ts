@@ -27,6 +27,7 @@ export const useScanStore = defineStore('scan', () => {
     switch (state.value.phase) {
       case 'scanning': return 'Scanne und importiere...'
       case 'done': return 'Scan abgeschlossen'
+      case 'cancelled': return 'Scan abgebrochen'
       case 'error': return 'Fehler beim Scan'
       default: return ''
     }
@@ -71,12 +72,16 @@ export const useScanStore = defineStore('scan', () => {
     return res
   }
 
+  async function cancelScan() {
+    await apiStore.post('/scan/cancel', {})
+  }
+
   // Watch for completion/error to stop polling
   watch(() => state.value.phase, (newPhase) => {
-    if (newPhase === 'done' || newPhase === 'error') {
+    if (newPhase === 'done' || newPhase === 'error' || newPhase === 'cancelled') {
       stopPolling()
     }
   })
 
-  return { state, progress, phaseLabel, startScan, startPolling, stopPolling, fetchStatus }
+  return { state, progress, phaseLabel, startScan, cancelScan, startPolling, stopPolling, fetchStatus }
 })

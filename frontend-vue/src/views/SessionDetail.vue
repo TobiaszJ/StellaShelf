@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useApiStore, type Frame } from '@/stores/api'
 import Pagination from '@/components/Pagination.vue'
@@ -22,6 +22,24 @@ const sortOrder = ref('desc')
 const previewFrame = ref<any>(null)
 const previewThumb = ref<string | null>(null)
 const previewLoading = ref(false)
+
+// Blob URL lifecycle management
+const blobUrls = ref<string[]>([])
+
+function trackBlobUrl(url: string | null) {
+  if (url) blobUrls.value.push(url)
+}
+
+function revokeAllBlobUrls() {
+  for (const url of blobUrls.value) {
+    URL.revokeObjectURL(url)
+  }
+  blobUrls.value = []
+}
+
+onUnmounted(() => {
+  revokeAllBlobUrls()
+})
 
 const sessionId = computed(() => parseInt(route.params.id as string))
 
@@ -85,6 +103,7 @@ async function loadFrames() {
 }
 
 async function loadThumbnails() {
+  revokeAllBlobUrls()
   try {
     const res = await apiStore.fetch<any>(`/frames`, {
       session_id: sessionId.value,
@@ -100,6 +119,7 @@ async function loadThumbnails() {
         try {
           const blob = await apiStore.fetchBlob(`/frames/${f.id}/thumbnail`)
           const url = URL.createObjectURL(blob)
+          trackBlobUrl(url)
           return { id: f.id, filename: f.filename, filter_name: f.filter_name, exposure: f.exposure, thumbnail: url }
         } catch {
           return { id: f.id, filename: f.filename, filter_name: f.filter_name, exposure: f.exposure, thumbnail: null }
@@ -114,13 +134,17 @@ async function loadThumbnails() {
 async function openPreview(f: any) {
   previewLoading.value = true
   previewFrame.value = null
-  previewThumb.value = null
+  if (previewThumb.value) {
+    URL.revokeObjectURL(previewThumb.value)
+    previewThumb.value = null
+  }
   try {
     const detail = await apiStore.fetch(`/frames/${f.id}`)
     previewFrame.value = detail
     try {
       const blob = await apiStore.fetchBlob(`/frames/${f.id}/thumbnail?preview=true`)
       previewThumb.value = URL.createObjectURL(blob)
+      trackBlobUrl(previewThumb.value)
     } catch {
       previewThumb.value = null
     }
@@ -132,9 +156,11 @@ async function openPreview(f: any) {
 }
 
 function closePreview() {
-  if (previewThumb.value) URL.revokeObjectURL(previewThumb.value)
+  if (previewThumb.value) {
+    URL.revokeObjectURL(previewThumb.value)
+    previewThumb.value = null
+  }
   previewFrame.value = null
-  previewThumb.value = null
 }
 
 watch([page, frameTypeFilter, sortBy, sortOrder], loadFrames)
@@ -258,34 +284,36 @@ const metadataEntries = computed(() => {
         </div>
       </div>
 
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th class="sortable" @click="toggleSort('date_obs')">Datum {{ sortIcon('date_obs') }}</th>
-            <th class="sortable" @click="toggleSort('frame_type')">Typ {{ sortIcon('frame_type') }}</th>
-            <th class="sortable" @click="toggleSort('filter_name')">Filter {{ sortIcon('filter_name') }}</th>
-            <th class="sortable" @click="toggleSort('exposure')">Belichtung {{ sortIcon('exposure') }}</th>
-            <th class="sortable" @click="toggleSort('gain')">Gain {{ sortIcon('gain') }}</th>
-            <th class="sortable" @click="toggleSort('ccd_temp')">Temp {{ sortIcon('ccd_temp') }}</th>
-            <th class="sortable" @click="toggleSort('binning')">Binning {{ sortIcon('binning') }}</th>
-            <th class="sortable" @click="toggleSort('hfd_median')">HFD {{ sortIcon('hfd_median') }}</th>
-            <th class="sortable" @click="toggleSort('stars_detected')">Stars {{ sortIcon('stars_detected') }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="f in frames" :key="f.id" class="clickable" @click="openPreview(f)">
-            <td class="cell-filename" :title="f.filepath">{{ f.filename }}</td>
-            <td><span :class="frameTypeBadge(f.frame_type)">{{ f.frame_type }}</span></td>
-            <td>{{ f.filter_name || '-' }}</td>
-            <td>{{ f.exposure ? f.exposure + 's' : '-' }}</td>
-            <td>{{ f.gain ?? '-' }}</td>
-            <td>{{ f.ccd_temp != null ? f.ccd_temp.toFixed(1) + '°C' : '-' }}</td>
-            <td>{{ f.binning }}x{{ f.binning }}</td>
-            <td>{{ f.hfd_median != null ? f.hfd_median.toFixed(1) : '-' }}</td>
-            <td>{{ f.stars_detected ?? '-' }}</td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th class="sortable" @click="toggleSort('date_obs')">Datum {{ sortIcon('date_obs') }}</th>
+              <th class="sortable" @click="toggleSort('frame_type')">Typ {{ sortIcon('frame_type') }}</th>
+              <th class="sortable" @click="toggleSort('filter_name')">Filter {{ sortIcon('filter_name') }}</th>
+              <th class="sortable" @click="toggleSort('exposure')">Belichtung {{ sortIcon('exposure') }}</th>
+              <th class="sortable" @click="toggleSort('gain')">Gain {{ sortIcon('gain') }}</th>
+              <th class="sortable" @click="toggleSort('ccd_temp')">Temp {{ sortIcon('ccd_temp') }}</th>
+              <th class="sortable" @click="toggleSort('binning')">Binning {{ sortIcon('binning') }}</th>
+              <th class="sortable" @click="toggleSort('hfd_median')">HFD {{ sortIcon('hfd_median') }}</th>
+              <th class="sortable" @click="toggleSort('stars_detected')">Stars {{ sortIcon('stars_detected') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="f in frames" :key="f.id" class="clickable" @click="openPreview(f)">
+              <td class="cell-filename" :title="f.filepath">{{ f.filename }}</td>
+              <td><span :class="frameTypeBadge(f.frame_type)">{{ f.frame_type }}</span></td>
+              <td>{{ f.filter_name || '-' }}</td>
+              <td>{{ f.exposure ? f.exposure + 's' : '-' }}</td>
+              <td>{{ f.gain ?? '-' }}</td>
+              <td>{{ f.ccd_temp != null ? f.ccd_temp.toFixed(1) + '°C' : '-' }}</td>
+              <td>{{ f.binning }}x{{ f.binning }}</td>
+              <td>{{ f.hfd_median != null ? f.hfd_median.toFixed(1) : '-' }}</td>
+              <td>{{ f.stars_detected ?? '-' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <Pagination :total="totalItems" :page="page" :pages="totalPages" @update:page="page = $event" />
@@ -304,14 +332,16 @@ const metadataEntries = computed(() => {
             <div v-else class="preview-noimg">Kein Vorschaubild verfügbar</div>
           </div>
           <div class="preview-metadata">
-            <table class="metadata-table">
-              <tbody>
-                <tr v-for="entry in metadataEntries" :key="entry.label">
-                  <td class="meta-label">{{ entry.label }}</td>
-                  <td class="meta-value">{{ entry.value }}</td>
-                </tr>
-              </tbody>
-            </table>
+            <div class="table-responsive">
+              <table class="metadata-table">
+                <tbody>
+                  <tr v-for="entry in metadataEntries" :key="entry.label">
+                    <td class="meta-label">{{ entry.label }}</td>
+                    <td class="meta-value">{{ entry.value }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>

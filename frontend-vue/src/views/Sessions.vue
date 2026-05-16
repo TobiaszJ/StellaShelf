@@ -92,37 +92,39 @@ watch([page, statusFilter, filterName, sortBy, sortOrder], load, { immediate: tr
       </div>
     </div>
 
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>Ziel</th>
-          <th class="sortable" @click="toggleSort('date_obs')">Datum {{ sortIcon('date_obs') }}</th>
-          <th>Kamera</th>
-          <th>Teleskop</th>
-          <th class="sortable" @click="toggleSort('total_exposure_h')">Belichtung {{ sortIcon('total_exposure_h') }}</th>
-          <th>Ordner</th>
-          <th class="sortable" @click="toggleSort('frame_count')">Frames {{ sortIcon('frame_count') }}</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr
-          v-for="s in sessions"
-          :key="s.id"
-          class="clickable"
-          @click="router.push({ name: 'session-detail', params: { id: s.id } })"
-        >
-          <td><strong>{{ s.target_name }}</strong></td>
-          <td>{{ s.date_obs ? new Date(s.date_obs).toLocaleDateString('de-CH') : '-' }}</td>
-          <td>{{ s.camera_name || '-' }}</td>
-          <td>{{ s.telescope_name || '-' }}</td>
-          <td>{{ s.total_exposure_h }}h</td>
-          <td class="folder-cell">{{ shortPath(s.folder_path) }}</td>
-          <td>{{ s.frame_count }}</td>
-          <td><span class="badge badge-light">{{ s.status }}</span></td>
-        </tr>
-      </tbody>
-    </table>
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Ziel</th>
+            <th class="sortable" @click="toggleSort('date_obs')">Datum {{ sortIcon('date_obs') }}</th>
+            <th>Kamera</th>
+            <th>Teleskop</th>
+            <th class="sortable" @click="toggleSort('total_exposure_h')">Belichtung {{ sortIcon('total_exposure_h') }}</th>
+            <th>Ordner</th>
+            <th class="sortable" @click="toggleSort('frame_count')">Frames {{ sortIcon('frame_count') }}</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="s in sessions"
+            :key="s.id"
+            class="clickable"
+            @click="router.push({ name: 'session-detail', params: { id: s.id } })"
+          >
+            <td><strong>{{ s.target_name }}</strong></td>
+            <td>{{ s.date_obs ? new Date(s.date_obs).toLocaleDateString('de-CH') : '-' }}</td>
+            <td>{{ s.camera_name || '-' }}</td>
+            <td>{{ s.telescope_name || '-' }}</td>
+            <td>{{ s.total_exposure_h }}h</td>
+            <td class="folder-cell">{{ shortPath(s.folder_path) }}</td>
+            <td>{{ s.frame_count }}</td>
+            <td><span class="badge badge-light">{{ s.status }}</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
     <Pagination :total="totalItems" :page="page" :pages="totalPages" @update:page="page = $event" />
   </div>

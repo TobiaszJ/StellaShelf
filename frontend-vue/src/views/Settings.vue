@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useApiStore, type Camera, type Telescope } from '@/stores/api'
+import { useThemeStore } from '@/stores/theme'
 
 const apiStore = useApiStore()
+const themeStore = useThemeStore()
 const settings = ref<Record<string, string>>({})
 const loading = ref(true)
 const saving = ref(false)
@@ -17,7 +19,6 @@ const telescopes = ref<Telescope[]>([])
 const SETTINGS_DEFINITIONS = [
   { key: 'scan_paths', label: 'Scan-Verzeichnisse', description: 'Komma-getrennte Liste von Pfaden', type: 'text', placeholder: 'z.B. /mnt/data/Astro/astro,/home/user/astro' },
   { key: 'astap_binary', label: 'ASTAP Binary Pfad', description: 'Pfad zur ASTAP ausführbaren Datei', type: 'text', placeholder: 'z.B. /usr/bin/astap' },
-  { key: 'theme', label: 'Theme', description: 'light / dark / system', type: 'select', options: ['light', 'dark', 'system'] },
 ]
 
 async function load() {
@@ -104,10 +105,16 @@ onMounted(load)
           <div v-for="def in SETTINGS_DEFINITIONS" :key="def.key" class="setting-item">
             <label :for="def.key">{{ def.label }}</label>
             <p class="setting-desc">{{ def.description }}</p>
-            <select v-if="def.type === 'select'" :id="def.key" v-model="settings[def.key]" class="setting-input">
-              <option v-for="opt in def.options" :key="opt" :value="opt">{{ opt }}</option>
+            <input :id="def.key" v-model="settings[def.key]" type="text" class="setting-input" :placeholder="def.placeholder || ''" />
+          </div>
+          <div class="setting-item">
+            <label>Theme</label>
+            <p class="setting-desc">Dark / Light / System (wird lokal gespeichert)</p>
+            <select class="setting-input" :value="themeStore.theme" @change="themeStore.setTheme(($event.target as HTMLSelectElement).value as any)">
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+              <option value="system">System</option>
             </select>
-            <input v-else :id="def.key" v-model="settings[def.key]" type="text" class="setting-input" :placeholder="def.placeholder || ''" />
           </div>
         </div>
       </div>
@@ -118,39 +125,43 @@ onMounted(load)
         <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">
           Ändere die angezeigten Namen deiner Kameras (z.B. "ZWO ASI294MM Pro" → "ASI294MM")
         </p>
-        <table class="data-table" v-if="cameras.length">
-          <thead><tr><th>Original-Name</th><th>Angezeigter Name</th></tr></thead>
-          <tbody>
-            <tr v-for="c in cameras" :key="c.id">
-              <td style="font-size: 12px; color: var(--text-muted);">{{ c.name }}</td>
-              <td>
-                <input
-                  v-model="settings[`camera_${c.id}_shortname`]"
-                  :placeholder="c.short_name || c.name"
-                  class="override-input"
-                />
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="table-responsive" v-if="cameras.length">
+          <table class="data-table">
+            <thead><tr><th>Original-Name</th><th>Angezeigter Name</th></tr></thead>
+            <tbody>
+              <tr v-for="c in cameras" :key="c.id">
+                <td style="font-size: 12px; color: var(--text-muted);">{{ c.name }}</td>
+                <td>
+                  <input
+                    v-model="settings[`camera_${c.id}_shortname`]"
+                    :placeholder="c.short_name || c.name"
+                    class="override-input"
+                  />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <p v-else class="empty">Keine Kameras gefunden.</p>
 
         <h3 style="margin-top: 24px;">Teleskop-Namen überschreiben</h3>
-        <table class="data-table" v-if="telescopes.length">
-          <thead><tr><th>Original-Name</th><th>Angezeigter Name</th></tr></thead>
-          <tbody>
-            <tr v-for="t in telescopes" :key="t.id">
-              <td style="font-size: 12px; color: var(--text-muted);">{{ t.name }}</td>
-              <td>
-                <input
-                  v-model="settings[`telescope_${t.id}_shortname`]"
-                  :placeholder="t.short_name || t.name"
-                  class="override-input"
-                />
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="table-responsive" v-if="telescopes.length">
+          <table class="data-table">
+            <thead><tr><th>Original-Name</th><th>Angezeigter Name</th></tr></thead>
+            <tbody>
+              <tr v-for="t in telescopes" :key="t.id">
+                <td style="font-size: 12px; color: var(--text-muted);">{{ t.name }}</td>
+                <td>
+                  <input
+                    v-model="settings[`telescope_${t.id}_shortname`]"
+                    :placeholder="t.short_name || t.name"
+                    class="override-input"
+                  />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <p v-else class="empty">Keine Teleskope gefunden.</p>
       </div>
 

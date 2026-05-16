@@ -5,17 +5,8 @@ import { useApiStore } from '@/stores/api'
 
 const scanStore = useScanStore()
 const apiStore = useApiStore()
-const selectedPath = ref('/mnt/data/Astro/astro')
-const knownPaths = ref<{ label: string; value: string }[]>([
-  { label: 'Alle Daten', value: '/mnt/data/Astro/astro' },
-  { label: 'ASI533MCPro', value: '/mnt/data/Astro/astro/ASI533MCPro' },
-  { label: 'ASI2600MMPro', value: '/mnt/data/Astro/astro/ASI2600MMPro' },
-  { label: 'ASI2600MMPro2', value: '/mnt/data/Astro/astro/ASI2600MMPro2' },
-  { label: 'ASI294MMPro', value: '/mnt/data/Astro/astro/ASI294MMPro' },
-  { label: 'ASI183MMPro', value: '/mnt/data/Astro/astro/ASI183MMPro' },
-  { label: 'nas/', value: '/mnt/data/Astro/astro/nas' },
-  { label: 'Sort', value: '/mnt/data/Astro/astro/Sort' },
-])
+const selectedPath = ref('')
+const knownPaths = ref<{ label: string; value: string }[]>([])
 
 // Cleanup state
 const cleanupTab = ref<'scan' | 'cleanup'>('scan')
@@ -39,11 +30,14 @@ onMounted(async () => {
       if (paths.length > 0) {
         knownPaths.value = paths.map((p: string) => ({ label: p, value: p }))
         selectedPath.value = paths[0]
+        return
       }
     }
   } catch {
-    // Fallback to hardcoded paths
+    // Settings table may not exist yet
   }
+  knownPaths.value = []
+  selectedPath.value = ''
 })
 
 const btnDisabled = computed(() => scanStore.state.running)
@@ -152,7 +146,7 @@ async function cleanupOrphans() {
     <!-- Scan Tab -->
     <template v-if="cleanupTab === 'scan'">
       <div class="card">
-        <h3>Scan-Pfad auswaehlen</h3>
+        <h3>Scan-Pfad auswählen</h3>
         <div class="scan-path-selector">
           <div class="filter-group">
             <label>Verzeichnis</label>
@@ -162,11 +156,16 @@ async function cleanupOrphans() {
           </div>
           <div class="filter-group">
             <label>Oder benutzerdefiniert</label>
-            <input type="text" v-model="selectedPath" placeholder="/mnt/data/Astro/..." />
+            <input type="text" v-model="selectedPath" placeholder="/pfad/zu/fits/..." />
           </div>
-          <button class="btn btn-success" :disabled="btnDisabled" @click="startScan">
-            Scan starten
-          </button>
+          <div class="scan-actions">
+            <button class="btn btn-success" :disabled="btnDisabled" @click="startScan">
+              Scan starten
+            </button>
+            <button v-if="scanStore.state.running" class="btn btn-danger" @click="scanStore.cancelScan()">
+              Abbrechen
+            </button>
+          </div>
         </div>
       </div>
 
@@ -190,7 +189,7 @@ async function cleanupOrphans() {
           </div>
           <div class="scan-stat">
             <div class="num">{{ scanStore.state.skipped.toLocaleString() }}</div>
-            <div class="lbl">Uebersprungen</div>
+            <div class="lbl">Übersprungen</div>
           </div>
         </div>
         <div class="current-file">{{ scanStore.state.current_file }}</div>
@@ -199,15 +198,15 @@ async function cleanupOrphans() {
       <div class="card">
         <h3>Info</h3>
         <p>Der Scan liest FITS-Header aus und importiert Metadaten in die Datenbank.
-           Bestehende Dateien werden uebersprungen. Der Scan laeuft im Hintergrund —
-           du kannst waehrenddessen weiterarbeiten.</p>
+           Bestehende Dateien werden übersprungen. Der Scan läuft im Hintergrund —
+           du kannst währenddessen weiterarbeiten.</p>
       </div>
     </template>
 
     <!-- Cleanup Tab -->
     <template v-if="cleanupTab === 'cleanup'">
       <div class="card">
-        <h3>Frames suchen und loeschen</h3>
+        <h3>Frames suchen und löschen</h3>
         <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 12px;">
           Suche nach Frames anhand von Dateiname oder Pfad. Verwende * als Platzhalter.
         </p>
@@ -241,7 +240,7 @@ async function cleanupOrphans() {
           <h3>{{ cleanupTotal }} Frames gefunden</h3>
           <div class="cleanup-actions">
             <span style="font-size: 13px; color: var(--text-muted);">
-              {{ cleanupSelected.size }} ausgewaehlt
+              {{ cleanupSelected.size }} ausgewählt
             </span>
             <button
               v-if="!cleanupConfirming"
@@ -249,14 +248,14 @@ async function cleanupOrphans() {
               :disabled="!cleanupSelected.size"
               @click="cleanupConfirming = true"
             >
-              Ausgewaehlte loeschen
+              Ausgewählte löschen
             </button>
             <template v-else>
               <span style="font-size: 13px; color: var(--danger);">
-                <strong>{{ cleanupSelected.size }} Frames wirklich loeschen?</strong>
+                <strong>{{ cleanupSelected.size }} Frames wirklich löschen?</strong>
               </span>
               <button class="btn btn-danger btn-sm" @click="deleteSelected" :disabled="cleanupBusy">
-                {{ cleanupBusy ? 'Loesche...' : 'Ja, loeschen' }}
+                {{ cleanupBusy ? 'Lösche...' : 'Ja, löschen' }}
               </button>
               <button class="btn btn-sm btn-ghost" @click="cleanupConfirming = false" :disabled="cleanupBusy">
                 Abbrechen
@@ -265,41 +264,43 @@ async function cleanupOrphans() {
           </div>
         </div>
         <div class="cleanup-table-wrapper">
-          <table class="data-table compact">
-            <thead>
-              <tr>
-                <th style="width: 32px;">
-                  <input
-                    type="checkbox"
-                    :checked="cleanupSelected.size === cleanupResults.length"
-                    :indeterminate="cleanupSelected.size > 0 && cleanupSelected.size < cleanupResults.length"
-                    @change="toggleSelectAll"
-                  />
-                </th>
-                <th>Dateiname</th>
-                <th>Typ</th>
-                <th>Filter</th>
-                <th>Belichtung</th>
-                <th>Pfad</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="f in cleanupResults" :key="f.id">
-                <td>
-                  <input
-                    type="checkbox"
-                    :checked="cleanupSelected.has(f.id)"
-                    @change="toggleSelect(f.id)"
-                  />
-                </td>
-                <td class="cell-monospace">{{ f.filename }}</td>
-                <td><span class="badge badge-light">{{ f.frame_type }}</span></td>
-                <td>{{ f.filter_name || '-' }}</td>
-                <td>{{ f.exposure ? f.exposure + 's' : '-' }}</td>
-                <td class="cell-monospace cell-path">{{ f.filepath }}</td>
-              </tr>
-            </tbody>
-          </table>
+          <div class="table-responsive">
+            <table class="data-table compact">
+              <thead>
+                <tr>
+                  <th style="width: 32px;">
+                    <input
+                      type="checkbox"
+                      :checked="cleanupSelected.size === cleanupResults.length"
+                      :indeterminate="cleanupSelected.size > 0 && cleanupSelected.size < cleanupResults.length"
+                      @change="toggleSelectAll"
+                    />
+                  </th>
+                  <th>Dateiname</th>
+                  <th>Typ</th>
+                  <th>Filter</th>
+                  <th>Belichtung</th>
+                  <th>Pfad</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="f in cleanupResults" :key="f.id">
+                  <td>
+                    <input
+                      type="checkbox"
+                      :checked="cleanupSelected.has(f.id)"
+                      @change="toggleSelect(f.id)"
+                    />
+                  </td>
+                  <td class="cell-monospace">{{ f.filename }}</td>
+                  <td><span class="badge badge-light">{{ f.frame_type }}</span></td>
+                  <td>{{ f.filter_name || '-' }}</td>
+                  <td>{{ f.exposure ? f.exposure + 's' : '-' }}</td>
+                  <td class="cell-monospace cell-path">{{ f.filepath }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -344,6 +345,11 @@ async function cleanupOrphans() {
 .tab.active {
   color: var(--text);
   border-bottom-color: var(--accent);
+}
+.scan-actions {
+  display: flex;
+  gap: 8px;
+  align-self: flex-end;
 }
 .cleanup-filters {
   display: flex;

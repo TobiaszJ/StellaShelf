@@ -95,68 +95,74 @@ function viewFrames(filterName: string) {
     <!-- Cameras -->
     <div class="card" v-if="activeTab === 'cameras'">
       <h3>Kameras</h3>
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th class="sortable" @click="toggleSort('name')">Name{{ sortIndicator('name') }}</th>
-            <th class="sortable" @click="toggleSort('pixel_size_um')">Pixel{{ sortIndicator('pixel_size_um') }}</th>
-            <th class="sortable" @click="toggleSort('frame_count')">Frames{{ sortIndicator('frame_count') }}</th>
-            <th class="sortable" @click="toggleSort('total_exposure_h')">Belichtung{{ sortIndicator('total_exposure_h') }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="c in paginatedItems" :key="c.id">
-            <td><strong>{{ c.name }}</strong> <span v-if="c.short_name" class="text-faint">({{ c.short_name }})</span></td>
-            <td>{{ c.pixel_size_um ? c.pixel_size_um + 'µm' : '-' }}</td>
-            <td>{{ c.frame_count }}</td>
-            <td>{{ c.total_exposure_h }}h</td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th class="sortable" @click="toggleSort('name')">Name{{ sortIndicator('name') }}</th>
+              <th class="sortable" @click="toggleSort('pixel_size_um')">Pixel{{ sortIndicator('pixel_size_um') }}</th>
+              <th class="sortable" @click="toggleSort('frame_count')">Frames{{ sortIndicator('frame_count') }}</th>
+              <th class="sortable" @click="toggleSort('total_exposure_h')">Belichtung{{ sortIndicator('total_exposure_h') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="c in paginatedItems" :key="c.id">
+              <td><strong>{{ c.name }}</strong> <span v-if="c.short_name" class="text-faint">({{ c.short_name }})</span></td>
+              <td>{{ c.pixel_size_um ? c.pixel_size_um + 'µm' : '-' }}</td>
+              <td>{{ c.frame_count }}</td>
+              <td>{{ c.total_exposure_h }}h</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <!-- Telescopes -->
     <div class="card" v-if="activeTab === 'telescopes'">
       <h3>Teleskope</h3>
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th class="sortable" @click="toggleSort('name')">Name{{ sortIndicator('name') }}</th>
-            <th class="sortable" @click="toggleSort('focal_length_mm')">Brennweite{{ sortIndicator('focal_length_mm') }}</th>
-            <th class="sortable" @click="toggleSort('frame_count')">Frames{{ sortIndicator('frame_count') }}</th>
-            <th class="sortable" @click="toggleSort('total_exposure_h')">Belichtung{{ sortIndicator('total_exposure_h') }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="t in paginatedItems" :key="t.id">
-            <td><strong>{{ t.name }}</strong></td>
-            <td>{{ t.focal_length_mm ? t.focal_length_mm + ' mm' : '-' }}</td>
-            <td>{{ t.frame_count }}</td>
-            <td>{{ t.total_exposure_h }}h</td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th class="sortable" @click="toggleSort('name')">Name{{ sortIndicator('name') }}</th>
+              <th class="sortable" @click="toggleSort('focal_length_mm')">Brennweite{{ sortIndicator('focal_length_mm') }}</th>
+              <th class="sortable" @click="toggleSort('frame_count')">Frames{{ sortIndicator('frame_count') }}</th>
+              <th class="sortable" @click="toggleSort('total_exposure_h')">Belichtung{{ sortIndicator('total_exposure_h') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="t in paginatedItems" :key="t.id">
+              <td><strong>{{ t.name }}</strong></td>
+              <td>{{ t.focal_length_mm ? t.focal_length_mm + ' mm' : '-' }}</td>
+              <td>{{ t.frame_count }}</td>
+              <td>{{ t.total_exposure_h }}h</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <!-- Filters -->
     <div class="card" v-if="activeTab === 'filters'">
       <h3>Filter</h3>
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th class="sortable" @click="toggleSort('name')">Name{{ sortIndicator('name') }}</th>
-            <th class="sortable" @click="toggleSort('frame_count')">Frames{{ sortIndicator('frame_count') }}</th>
-            <th class="sortable" @click="toggleSort('total_exposure_h')">Belichtung{{ sortIndicator('total_exposure_h') }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="f in paginatedItems" :key="f.name" class="clickable" @click="viewFrames(f.name)">
-            <td><strong>{{ f.name }}</strong></td>
-            <td>{{ f.frame_count }}</td>
-            <td>{{ f.total_exposure_h }}h</td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th class="sortable" @click="toggleSort('name')">Name{{ sortIndicator('name') }}</th>
+              <th class="sortable" @click="toggleSort('frame_count')">Frames{{ sortIndicator('frame_count') }}</th>
+              <th class="sortable" @click="toggleSort('total_exposure_h')">Belichtung{{ sortIndicator('total_exposure_h') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="f in paginatedItems" :key="f.name" class="clickable" @click="viewFrames(f.name)">
+              <td><strong>{{ f.name }}</strong></td>
+              <td>{{ f.frame_count }}</td>
+              <td>{{ f.total_exposure_h }}h</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <Pagination :total="totalItems" :page="page" :pages="totalPages" @update:page="page = $event" />

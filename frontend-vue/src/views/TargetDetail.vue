@@ -259,11 +259,11 @@ watch(mergeSearch, searchMergeTargets)
         <div class="label">Belichtung</div>
       </div>
       <div class="stat-card">
-        <div class="value">{{ target.ra_deg ? formatCoord(target.ra_deg, 'RA') : '-' }}</div>
+        <div class="value">{{ target.ra_deg != null ? formatCoord(target.ra_deg, 'RA') : '-' }}</div>
         <div class="label">Rektaszension</div>
       </div>
       <div class="stat-card">
-        <div class="value">{{ target.dec_deg ? formatCoord(target.dec_deg, 'DEC') : '-' }}</div>
+        <div class="value">{{ target.dec_deg != null ? formatCoord(target.dec_deg, 'DEC') : '-' }}</div>
         <div class="label">Deklination</div>
       </div>
     </div>
@@ -284,33 +284,35 @@ watch(mergeSearch, searchMergeTargets)
 
     <div class="card">
       <h3>Sessions ({{ totalItems }})</h3>
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th class="sortable" @click="toggleSort('date_obs')">Datum {{ sortIcon('date_obs') }}</th>
-            <th>Kamera</th>
-            <th>Teleskop</th>
-            <th class="sortable" @click="toggleSort('total_exposure_h')">Belichtung {{ sortIcon('total_exposure_h') }}</th>
-            <th class="sortable" @click="toggleSort('frame_count')">Frames {{ sortIcon('frame_count') }}</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="s in sessions"
-            :key="s.id"
-            class="clickable"
-            @click="router.push({ name: 'session-detail', params: { id: s.id } })"
-          >
-            <td>{{ s.date_obs ? new Date(s.date_obs).toLocaleDateString('de-CH') : '-' }}</td>
-            <td>{{ s.camera_name || '-' }}</td>
-            <td>{{ s.telescope_name || '-' }}</td>
-            <td>{{ s.total_exposure_h }}h</td>
-            <td>{{ s.frame_count }}</td>
-            <td><span class="badge badge-light">{{ s.status }}</span></td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th class="sortable" @click="toggleSort('date_obs')">Datum {{ sortIcon('date_obs') }}</th>
+              <th>Kamera</th>
+              <th>Teleskop</th>
+              <th class="sortable" @click="toggleSort('total_exposure_h')">Belichtung {{ sortIcon('total_exposure_h') }}</th>
+              <th class="sortable" @click="toggleSort('frame_count')">Frames {{ sortIcon('frame_count') }}</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="s in sessions"
+              :key="s.id"
+              class="clickable"
+              @click="router.push({ name: 'session-detail', params: { id: s.id } })"
+            >
+              <td>{{ s.date_obs ? new Date(s.date_obs).toLocaleDateString('de-CH') : '-' }}</td>
+              <td>{{ s.camera_name || '-' }}</td>
+              <td>{{ s.telescope_name || '-' }}</td>
+              <td>{{ s.total_exposure_h }}h</td>
+              <td>{{ s.frame_count }}</td>
+              <td><span class="badge badge-light">{{ s.status }}</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <Pagination :total="totalItems" :page="page" :pages="totalPages" @update:page="onPageChange" />

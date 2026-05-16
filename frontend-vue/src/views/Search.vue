@@ -65,47 +65,53 @@ watch(query, (val) => {
       <!-- Targets -->
       <div class="card" v-if="activeTab === 'all' || activeTab === 'targets'">
         <h3>Targets</h3>
-        <table class="data-table" v-if="results.targets.length">
-          <thead><tr><th>Name</th><th>Typ</th></tr></thead>
-          <tbody>
-            <tr v-for="t in results.targets" :key="t.id" class="clickable" @click="router.push({ name: 'target-detail', params: { id: t.id } })">
-              <td><strong>{{ t.name }}</strong></td>
-              <td>{{ t.type || '-' }}</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="table-responsive" v-if="results.targets.length">
+          <table class="data-table">
+            <thead><tr><th>Name</th><th>Typ</th></tr></thead>
+            <tbody>
+              <tr v-for="t in results.targets" :key="t.id" class="clickable" @click="router.push({ name: 'target-detail', params: { id: t.id } })">
+                <td><strong>{{ t.name }}</strong></td>
+                <td>{{ t.type || '-' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <p v-else class="empty">Keine Targets gefunden.</p>
       </div>
 
       <!-- Sessions -->
       <div class="card" v-if="activeTab === 'all' || activeTab === 'sessions'">
         <h3>Sessions</h3>
-        <table class="data-table" v-if="results.sessions.length">
-          <thead><tr><th>Session</th><th>Datum</th><th>Frames</th></tr></thead>
-          <tbody>
-            <tr v-for="s in results.sessions" :key="s.id" class="clickable" @click="router.push({ name: 'session-detail', params: { id: s.id } })">
-              <td><strong>{{ s.group_key }}</strong></td>
-              <td>{{ s.date_obs ? new Date(s.date_obs).toLocaleDateString('de-CH') : '-' }}</td>
-              <td>{{ s.frame_count }}</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="table-responsive" v-if="results.sessions.length">
+          <table class="data-table">
+            <thead><tr><th>Session</th><th>Datum</th><th>Frames</th></tr></thead>
+            <tbody>
+              <tr v-for="s in results.sessions" :key="s.id" class="clickable" @click="router.push({ name: 'session-detail', params: { id: s.id } })">
+                <td><strong>{{ s.group_key }}</strong></td>
+                <td>{{ s.date_obs ? new Date(s.date_obs).toLocaleDateString('de-CH') : '-' }}</td>
+                <td>{{ s.frame_count }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <p v-else class="empty">Keine Sessions gefunden.</p>
       </div>
 
       <!-- Frames -->
       <div class="card" v-if="activeTab === 'all' || activeTab === 'frames'">
         <h3>Frames</h3>
-        <table class="data-table" v-if="results.frames.length">
-          <thead><tr><th>Datei</th><th>Target</th><th>Typ</th></tr></thead>
-          <tbody>
-            <tr v-for="f in results.frames" :key="f.id">
-              <td style="font-family: monospace; font-size: 12px;">{{ f.filename }}</td>
-              <td>{{ f.object_name }}</td>
-              <td><span :class="'badge badge-' + f.frame_type.toLowerCase()">{{ f.frame_type }}</span></td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="table-responsive" v-if="results.frames.length">
+          <table class="data-table">
+            <thead><tr><th>Datei</th><th>Target</th><th>Typ</th></tr></thead>
+            <tbody>
+              <tr v-for="f in results.frames" :key="f.id">
+                <td style="font-family: monospace; font-size: 12px;">{{ f.filename }}</td>
+                <td>{{ f.object_name }}</td>
+                <td><span :class="'badge badge-' + f.frame_type.toLowerCase()">{{ f.frame_type }}</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <p v-else class="empty">Keine Frames gefunden.</p>
       </div>
     </div>

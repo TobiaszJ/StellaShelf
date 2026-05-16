@@ -30,28 +30,34 @@ const topTargets = computed(() => dashboard.value?.top_targets || [])
 const recentSessions = computed(() => dashboard.value?.recent_sessions || [])
 const cameras = computed(() => dashboard.value?.cameras || [])
 
-const chartOption = computed(() => ({
-  tooltip: { trigger: 'axis' as const },
-  grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-  xAxis: {
-    type: 'category' as const,
-    data: topTargets.value.slice(0, 5).map((t: any) => t.name),
-    axisLabel: { color: '#8b949e', fontSize: 11 },
-  },
-  yAxis: {
-    type: 'value' as const,
-    name: 'Stunden',
-    nameTextStyle: { color: '#8b949e', fontSize: 11 },
-    axisLabel: { color: '#8b949e', fontSize: 11 },
-    splitLine: { lineStyle: { color: '#21262d' } },
-  },
-  series: [{
-    type: 'bar' as const,
-    data: topTargets.value.slice(0, 5).map((t: any) => t.total_exposure_h),
-    itemStyle: { color: '#58a6ff', borderRadius: [4, 4, 0, 0] },
-    barMaxWidth: 40,
-  }],
-}))
+const chartOption = computed(() => {
+  const isDark = document.documentElement.getAttribute('data-theme') !== 'light'
+  const textColor = isDark ? '#8b949e' : '#656d76'
+  const splitColor = isDark ? '#21262d' : '#d0d7de'
+  const barColor = isDark ? '#58a6ff' : '#0969da'
+  return {
+    tooltip: { trigger: 'axis' as const },
+    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+    xAxis: {
+      type: 'category' as const,
+      data: topTargets.value.slice(0, 5).map((t: any) => t.name),
+      axisLabel: { color: textColor, fontSize: 11 },
+    },
+    yAxis: {
+      type: 'value' as const,
+      name: 'Stunden',
+      nameTextStyle: { color: textColor, fontSize: 11 },
+      axisLabel: { color: textColor, fontSize: 11 },
+      splitLine: { lineStyle: { color: splitColor } },
+    },
+    series: [{
+      type: 'bar' as const,
+      data: topTargets.value.slice(0, 5).map((t: any) => t.total_exposure_h),
+      itemStyle: { color: barColor, borderRadius: [4, 4, 0, 0] },
+      barMaxWidth: 40,
+    }],
+  }
+})
 </script>
 
 <template>
@@ -94,16 +100,18 @@ const chartOption = computed(() => ({
 
       <div class="card">
         <h3>Kameras</h3>
-        <table class="data-table">
-          <thead><tr><th>Name</th><th>Frames</th><th>Belichtung</th></tr></thead>
-          <tbody>
-            <tr v-for="c in cameras" :key="c.id">
-              <td><strong>{{ c.short_name || c.name }}</strong></td>
-              <td>{{ c.frame_count }}</td>
-              <td>{{ c.total_exposure_h }}h</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead><tr><th>Name</th><th>Frames</th><th>Belichtung</th></tr></thead>
+            <tbody>
+              <tr v-for="c in cameras" :key="c.id">
+                <td><strong>{{ c.short_name || c.name }}</strong></td>
+                <td>{{ c.frame_count }}</td>
+                <td>{{ c.total_exposure_h }}h</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div class="card" v-if="topTargets.length">
@@ -115,29 +123,31 @@ const chartOption = computed(() => ({
 
       <div class="card">
         <h3>Letzte Sessions</h3>
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Ziel</th>
-              <th>Datum</th>
-              <th>Belichtung</th>
-              <th>Frames</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="s in recentSessions"
-              :key="s.id"
-              class="clickable"
-              @click="router.push({ name: 'session-detail', params: { id: s.id } })"
-            >
-              <td>{{ s.target_name }}</td>
-              <td>{{ s.date_obs ? new Date(s.date_obs).toLocaleDateString('de-CH') : '-' }}</td>
-              <td>{{ s.total_exposure_h }}h</td>
-              <td>{{ s.frame_count }}</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Ziel</th>
+                <th>Datum</th>
+                <th>Belichtung</th>
+                <th>Frames</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="s in recentSessions"
+                :key="s.id"
+                class="clickable"
+                @click="router.push({ name: 'session-detail', params: { id: s.id } })"
+              >
+                <td>{{ s.target_name }}</td>
+                <td>{{ s.date_obs ? new Date(s.date_obs).toLocaleDateString('de-CH') : '-' }}</td>
+                <td>{{ s.total_exposure_h }}h</td>
+                <td>{{ s.frame_count }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </template>
   </div>

@@ -584,7 +584,8 @@ def platesolve_frame(
 ) -> dict | None:
     """Run ASTAP CLI on a FITS file to extract RA/Dec coordinates.
 
-    Does NOT modify the original FITS file — all results go to temp files.
+    Writes the solution to the FITS header via ASTAP's -update flag.
+    Temp .wcs and .ini files are parsed but cleaned up afterwards.
 
     Args:
         filepath: Path to the FITS file.
@@ -606,7 +607,7 @@ def platesolve_frame(
             tmp_wcs = Path(tmp_base + ".wcs")
             tmp_ini = Path(tmp_base + ".ini")
 
-        cmd = [astap_binary, "-f", str(filepath), "-o", tmp_base, "-r", "10"]
+        cmd = [astap_binary, "-f", str(filepath), "-o", tmp_base, "-r", "10", "-update"]
         if ra_hint is not None and dec_hint is not None:
             ra_hours = ra_hint / 15.0
             spd = 180.0 - dec_hint
