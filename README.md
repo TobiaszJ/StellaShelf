@@ -12,7 +12,7 @@ Open-source tool for cataloging, organizing, and managing deep-sky astrophotogra
 
 - **FITS Header Scanner**: Recursively scans directories for FITS files, extracts metadata from headers (OBJECT, EXPOSURE, FILTER, coordinates, etc.)
 - **Automatic Session Grouping**: Groups frames by target + date + camera + telescope + filter
-- **Object Name Normalization**: M51, m51, M 51 → M 51 — prevents duplicate targets
+- **Object Name Normalization**: M51, m51, M 51 → M51 — prevents duplicate targets
 - **Target Merging**: Manual merge per-target + auto-merge-all-duplicates with one click
 - **Duplicate Detection**: Automatic detection of targets with the same normalized name
 - **Frame Cleanup**: Search by filename or path (wildcards supported), bulk delete from DB
@@ -65,7 +65,7 @@ src/stellashelf/
 ├── scanner.py      # FITS header extraction, session grouping, thumbnail generation, platesolving
 ├── db.py           # SQLAlchemy models (Target, Session, Frame, Camera, Telescope, Setting)
 ├── importer.py     # Centralized import pipeline (CLI & API)
-├── catalog.py      # Object name normalization (M51, M 51, m51 → M 51)
+├── catalog.py      # Object name normalization (M51, M 51, m51 → M51)
 ├── cli.py          # Click CLI commands
 ├── api.py          # FastAPI REST API + Vue 3 SPA serving (20+ endpoints)
 └── config.py       # Centralized configuration (paths, defaults)

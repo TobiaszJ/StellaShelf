@@ -103,37 +103,37 @@ class TestNormalizeObjectName:
     def test_messier_no_space(self):
         from stellashelf.catalog import normalize_object_name
 
-        assert normalize_object_name("M51") == "M 51"
+        assert normalize_object_name("M51") == "M51"
 
     def test_messier_lowercase(self):
         from stellashelf.catalog import normalize_object_name
 
-        assert normalize_object_name("m51") == "M 51"
+        assert normalize_object_name("m51") == "M51"
 
     def test_messier_with_space(self):
         from stellashelf.catalog import normalize_object_name
 
-        assert normalize_object_name("M 51") == "M 51"
+        assert normalize_object_name("M 51") == "M51"
 
     def test_messier_leading_zero(self):
         from stellashelf.catalog import normalize_object_name
 
-        assert normalize_object_name("M051") == "M 51"
+        assert normalize_object_name("M051") == "M51"
 
     def test_ngc_no_space(self):
         from stellashelf.catalog import normalize_object_name
 
-        assert normalize_object_name("NGC5194") == "NGC 5194"
+        assert normalize_object_name("NGC5194") == "NGC5194"
 
     def test_ngc_lowercase(self):
         from stellashelf.catalog import normalize_object_name
 
-        assert normalize_object_name("ngc 2244") == "NGC 2244"
+        assert normalize_object_name("ngc 2244") == "NGC2244"
 
     def test_ic_no_space(self):
         from stellashelf.catalog import normalize_object_name
 
-        assert normalize_object_name("ic434") == "IC 434"
+        assert normalize_object_name("ic434") == "IC434"
 
     def test_sharpless_dash(self):
         from stellashelf.catalog import normalize_object_name
@@ -188,22 +188,22 @@ class TestNormalizeObjectName:
     def test_messier_letter_suffix(self):
         from stellashelf.catalog import normalize_object_name
 
-        assert normalize_object_name("M31A") == "M 31A"
+        assert normalize_object_name("M31A") == "M31A"
 
     def test_ngc_letter_suffix(self):
         from stellashelf.catalog import normalize_object_name
 
-        assert normalize_object_name("NGC7000") == "NGC 7000"
+        assert normalize_object_name("NGC7000") == "NGC7000"
 
     def test_messier_with_extra_spaces(self):
         from stellashelf.catalog import normalize_object_name
 
-        assert normalize_object_name("  M   51  ") == "M 51"
+        assert normalize_object_name("  M   51  ") == "M51"
 
     def test_ic_leading_zero(self):
         from stellashelf.catalog import normalize_object_name
 
-        assert normalize_object_name("IC0434") == "IC 434"
+        assert normalize_object_name("IC0434") == "IC434"
 
 
 # ---------------------------------------------------------------------------
@@ -215,16 +215,16 @@ class TestObjectExtraction:
     """Tests for extracting object names from filenames."""
 
     def test_messier(self):
-        assert _extract_object_from_filename("M42_Ha_300s.fit") == "M 42"
-        assert _extract_object_from_filename("M31-2_L_600s.fit") == "M 31-2"
+        assert _extract_object_from_filename("M42_Ha_300s.fit") == "M42"
+        assert _extract_object_from_filename("M31-2_L_600s.fit") == "M31-2"
 
     def test_ngc(self):
-        assert _extract_object_from_filename("NGC7000_Ha_600s.fit") == "NGC 7000"
-        assert _extract_object_from_filename("NGC6992_OIII_300s.fit") == "NGC 6992"
+        assert _extract_object_from_filename("NGC7000_Ha_600s.fit") == "NGC7000"
+        assert _extract_object_from_filename("NGC6992_OIII_300s.fit") == "NGC6992"
 
     def test_ic(self):
-        assert _extract_object_from_filename("IC434_Ha_600s.fit") == "IC 434"
-        assert _extract_object_from_filename("IC5146_L_300s.fit") == "IC 5146"
+        assert _extract_object_from_filename("IC434_Ha_600s.fit") == "IC434"
+        assert _extract_object_from_filename("IC5146_L_300s.fit") == "IC5146"
 
     def test_sharpless(self):
         assert _extract_object_from_filename("SH2-101_Ha_600s.fit") == "SH2-101"

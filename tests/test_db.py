@@ -44,7 +44,7 @@ class TestDatabase:
                     camera_id=camera.id,
                     telescope_id=telescope.id,
                     date_obs=datetime(2020, 11, 23, 19, 54, 29),
-                    group_key="NGC 7000|2020-11-23|ASI294MMPro|140PH|L",
+                    group_key="NGC7000|2020-11-23|ASI294MMPro|140PH|L",
                     total_exposure_s=3000,
                     total_exposure_h=0.833,
                     frame_count=10,

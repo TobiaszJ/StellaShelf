@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func as sa_func
 from sqlalchemy import text
 
-from stellashelf import __version__
+from stellashelf import __build__, __version__
 from stellashelf.config import DEFAULT_DB_PATH
 from stellashelf.db import CalibrationFile, Camera, Frame, Setting, Target, Telescope, init_db
 from stellashelf.db import Session as ObsSession
@@ -298,7 +298,7 @@ class ScanRequest(BaseModel):
 
 @app.get("/api/v1/health")
 def health_check():
-    return {"status": "ok", "db": str(_db_path)}
+    return {"status": "ok", "version": __version__, "build": __build__, "db": str(_db_path)}
 
 
 @app.get("/api/v1/search")
@@ -1683,10 +1683,7 @@ def _run_platesolve_task():
                 astap_binary = setting.value
 
             unplated = (
-                sess.query(Frame)
-                .filter(Frame.ra_deg.is_(None), Frame.dec_deg.is_(None))
-                .limit(50)
-                .all()
+                sess.query(Frame).filter(Frame.ra_deg.is_(None), Frame.dec_deg.is_(None)).all()
             )
 
             total = len(unplated)

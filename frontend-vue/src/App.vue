@@ -1,13 +1,31 @@
 <script setup lang="ts">
+import { ref, onMounted } from 'vue'
 import { RouterView, RouterLink } from 'vue-router'
 import { Telescope, Target, Camera, FolderOpen, ScanLine, Search, Settings as SettingsIcon, HelpCircle, Globe, Sun, Moon } from 'lucide-vue-next'
 import { useScanStore } from '@/stores/scan'
 import { usePlatesolveStore } from '@/stores/platesolve'
 import { useThemeStore } from '@/stores/theme'
+import { useApiStore } from '@/stores/api'
 
 const scanStore = useScanStore()
 const platesolveStore = usePlatesolveStore()
 const themeStore = useThemeStore()
+const apiStore = useApiStore()
+
+const buildInfo = ref('')
+
+async function loadBuildInfo() {
+  try {
+    const health = await apiStore.fetch<{ version: string; build: string }>('/health')
+    buildInfo.value = health.build
+  } catch {
+    buildInfo.value = 'dev'
+  }
+}
+
+onMounted(() => {
+  loadBuildInfo()
+})
 
 // Initialize theme on mount
 themeStore.init()
@@ -39,6 +57,7 @@ function toggleTheme() {
           StellaShelf
         </h1>
         <div class="version">v0.3.0</div>
+        <div class="build" v-if="buildInfo">{{ buildInfo }}</div>
       </div>
       <nav class="sidebar-nav">
         <RouterLink to="/" class="nav-item">

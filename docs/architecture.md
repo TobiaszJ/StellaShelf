@@ -152,7 +152,7 @@ src/stellashelf/
 ├── scanner.py      # FITS header extraction, session grouping, thumbnail generation, platesolving
 ├── db.py           # SQLAlchemy models (Target, Session, Frame, Camera, Telescope, CalibrationFile, Setting)
 ├── importer.py     # Centralized import pipeline (CLI & API)
-├── catalog.py      # Object name normalization (M51, M 51, m51 → M 51)
+├── catalog.py      # Object name normalization (M51, M 51, m51 → M51)
 ├── cli.py          # Click CLI commands
 ├── api.py          # FastAPI REST API (20+ endpoints) + Vue 3 SPA serving + background tasks
 └── config.py       # Centralized configuration (paths, defaults)

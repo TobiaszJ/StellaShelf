@@ -1,11 +1,18 @@
-"""Astronomical object name normalization."""
+"""Astronomical object name normalization.
+
+Normalizes catalog object names to canonical form without spaces:
+M51, m51, M 51 → M51
+NGC7000, ngc 7000 → NGC7000
+IC434, ic 434 → IC434
+Non-catalog names are uppercased with single spaces.
+"""
 
 import re
 
 _CATALOG_PATTERNS = [
-    (r"M\s*0*(\d+[a-zA-Z0-9-]*)", "M", " "),
-    (r"NGC\s*0*(\d+[a-zA-Z0-9-]*)", "NGC", " "),
-    (r"IC\s*0*(\d+[a-zA-Z0-9-]*)", "IC", " "),
+    (r"M\s*0*(\d+[a-zA-Z0-9-]*)", "M", ""),
+    (r"NGC\s*0*(\d+[a-zA-Z0-9-]*)", "NGC", ""),
+    (r"IC\s*0*(\d+[a-zA-Z0-9-]*)", "IC", ""),
     (r"SH\s*2\s*[-_]?\s*0*(\d+)", "SH2", "-"),
     (r"LDN\s*0*(\d+)", "LDN", " "),
     (r"vdB\s*0*(\d+)", "vdB", " "),
