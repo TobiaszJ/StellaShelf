@@ -12,6 +12,7 @@ const page = ref(1)
 const totalPages = ref(1)
 const totalItems = ref(0)
 const statusFilter = ref('')
+const filterName = ref('')
 const sortBy = ref('date_obs')
 const sortOrder = ref('desc')
 
@@ -37,24 +38,29 @@ function sortIcon(col: string): string {
 }
 
 // Read filter query param from Equipment view navigation
+if (route.query.filter_name) {
+  filterName.value = route.query.filter_name as string
+}
 if (route.query.filter) {
   statusFilter.value = route.query.filter as string
 }
 
 async function load() {
-  const res = await apiStore.fetch<PaginatedResponse<Session>>('/sessions', {
+  const params: Record<string, any> = {
     page: page.value,
     page_size: 50,
-    status: statusFilter.value || undefined,
     sort_by: sortBy.value,
     sort_order: sortOrder.value,
-  })
+  }
+  if (statusFilter.value) params.status = statusFilter.value
+  if (filterName.value) params.filter_name = filterName.value
+  const res = await apiStore.fetch<PaginatedResponse<Session>>('/sessions', params)
   sessions.value = res.items
   totalPages.value = res.pages
   totalItems.value = res.total
 }
 
-watch([page, statusFilter, sortBy, sortOrder], load, { immediate: true })
+watch([page, statusFilter, filterName, sortBy, sortOrder], load, { immediate: true })
 
 </script>
 
@@ -63,6 +69,7 @@ watch([page, statusFilter, sortBy, sortOrder], load, { immediate: true })
     <div class="page-header">
       <h2>Sessions</h2>
       <p>{{ totalItems }} Beobachtungs-Sessions</p>
+      <span v-if="filterName" class="filter-badge">Filter: {{ filterName }}</span>
     </div>
 
     <div class="filters">

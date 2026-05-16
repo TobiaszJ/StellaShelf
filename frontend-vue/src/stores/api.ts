@@ -142,10 +142,24 @@ export const useApiStore = defineStore('api', () => {
     }
   }
 
+  async function patch<T>(url: string, data: any): Promise<T> {
+    loading.value = true
+    error.value = null
+    try {
+      const res = await api.patch(url, data)
+      return res.data
+    } catch (e: any) {
+      error.value = e.response?.data?.detail || e.message
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
   async function fetchBlob(url: string): Promise<Blob> {
     const res = await api.get(url, { responseType: 'blob' })
     return res.data
   }
 
-  return { loading, error, fetch, post, fetchBlob }
+  return { loading, error, fetch, post, patch, fetchBlob }
 })

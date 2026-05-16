@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func as sa_func
 from sqlalchemy import text
 
+from stellashelf import __version__
 from stellashelf.config import DEFAULT_DB_PATH
 from stellashelf.db import CalibrationFile, Camera, Frame, Setting, Target, Telescope, init_db
 from stellashelf.db import Session as ObsSession
@@ -56,7 +57,7 @@ def get_session_local():
     return _engine, _session_local
 
 
-app = FastAPI(title="StellaShelf", version="0.2.0")
+app = FastAPI(title="StellaShelf", version=__version__)
 
 _cors_origins = os.environ.get("STELLASHELF_CORS_ORIGINS", "*").split(",")
 app.add_middleware(
@@ -975,6 +976,7 @@ def list_sessions(
     target_id: int | None = Query(None),
     camera_id: int | None = Query(None),
     telescope_id: int | None = Query(None),
+    filter_name: str | None = Query(None, description="Filter by filter name used in sessions"),
     status: str | None = Query(None),
     date_from: str | None = Query(None, description="Start date YYYY-MM-DD"),
     date_to: str | None = Query(None, description="End date YYYY-MM-DD"),
@@ -1010,6 +1012,15 @@ def list_sessions(
             q = q.filter(ObsSession.camera_id == camera_id)
         if telescope_id is not None:
             q = q.filter(ObsSession.telescope_id == telescope_id)
+        if filter_name is not None:
+            q = q.filter(
+                ObsSession.id.in_(
+                    session.query(Frame.session_id).filter(
+                        Frame.session_id.isnot(None),
+                        Frame.filter_name == filter_name
+                    )
+                )
+            )
         if status is not None:
             q = q.filter(ObsSession.status == status)
         if date_from:
@@ -1028,7 +1039,8 @@ def list_sessions(
         total = q.count()
         pages = (total + page_size - 1) // page_size
 
-        order_col = getattr(ObsSession, sort_by, ObsSession.date_obs)
+        _allowed_session_sort = {"date_obs": ObsSession.date_obs, "total_exposure_h": ObsSession.total_exposure_h, "total_exposure_s": ObsSession.total_exposure_s, "frame_count": ObsSession.frame_count, "target_id": ObsSession.target_id, "camera_id": ObsSession.camera_id, "status": ObsSession.status, "group_key": ObsSession.group_key}
+        order_col = _allowed_session_sort.get(sort_by, ObsSession.date_obs)
         order_col = order_col.desc() if sort_order == "desc" else order_col.asc()
 
         items = [
@@ -1095,6 +1107,27 @@ def get_session(session_id: int):
             frame_count=obs.frame_count,
             folder_path=obs.folder_path,
         )
+
+
+class SessionStatusUpdate(BaseModel):
+    status: str
+
+
+@app.patch("/api/v1/sessions/{session_id}")
+def update_session(session_id: int, req: SessionStatusUpdate):
+    """Update session metadata (e.g. status)."""
+    allowed_statuses = {"raw", "calibrated", "stacked"}
+    if req.status not in allowed_statuses:
+        raise HTTPException(400, f"Invalid status. Allowed: {', '.join(sorted(allowed_statuses))}")
+
+    engine, SessionLocal = get_session_local()
+    with SessionLocal() as session:
+        obs = session.get(ObsSession, session_id)
+        if not obs:
+            raise HTTPException(status_code=404, detail="Session not found")
+        obs.status = req.status
+        session.commit()
+        return {"status": "ok", "session_id": session_id, "new_status": req.status}
 
 
 # ---------------------------------------------------------------------------
@@ -1196,7 +1229,8 @@ def list_frames(
         total = q.count()
         pages = (total + page_size - 1) // page_size
 
-        order_col = getattr(Frame, sort_by, Frame.date_obs)
+        _allowed_frame_sort = {"date_obs": Frame.date_obs, "filename": Frame.filename, "frame_type": Frame.frame_type, "filter_name": Frame.filter_name, "exposure": Frame.exposure, "gain": Frame.gain, "ccd_temp": Frame.ccd_temp, "binning": Frame.binning, "object_name": Frame.object_name, "filepath": Frame.filepath, "session_id": Frame.session_id, "date_local": Frame.date_local, "file_size": Frame.file_size}
+        order_col = _allowed_frame_sort.get(sort_by, Frame.date_obs)
         order_col = order_col.desc() if sort_order == "desc" else order_col.asc()
 
         items = [
@@ -1597,7 +1631,6 @@ def _run_platesolve_task():
             if setting and setting.value:
                 astap_binary = setting.value
 
-        with SessionLocal() as sess:
             unplated = (
                 sess.query(Frame)
                 .filter(Frame.ra_deg.is_(None), Frame.dec_deg.is_(None))
@@ -1605,22 +1638,21 @@ def _run_platesolve_task():
                 .all()
             )
 
-        total = len(unplated)
-        solved = 0
-        failed = 0
-        log_entries = []
+            total = len(unplated)
+            solved = 0
+            failed = 0
+            log_entries = []
 
-        with _platesolve_lock:
-            _platesolve_state["total"] = total
-            _platesolve_state["log"] = []
+            with _platesolve_lock:
+                _platesolve_state["total"] = total
+                _platesolve_state["log"] = []
 
-        with SessionLocal() as sess:
             for _i, frame in enumerate(unplated):
                 # Check for cancellation
                 with _platesolve_lock:
                     if _platesolve_state.get("cancelled"):
                         log_entries.append(
-                            {"frame": frame.filename, "status": "cancelled", "detail": "Abgebrochen"}
+                            {"frame": frame.filename, "status": "cancelled", "detail": "Cancelled"}
                         )
                         break
 
@@ -1628,7 +1660,7 @@ def _run_platesolve_task():
                 if not fp.exists():
                     failed += 1
                     log_entries.append(
-                        {"frame": frame.filename, "status": "failed", "detail": "Datei nicht gefunden"}
+                        {"frame": frame.filename, "status": "failed", "detail": "File not found"}
                     )
                     with _platesolve_lock:
                         _platesolve_state["failed"] = failed
@@ -1661,7 +1693,7 @@ def _run_platesolve_task():
                 else:
                     failed += 1
                     log_entries.append(
-                        {"frame": frame.filename, "status": "failed", "detail": "Keine Lösung gefunden"}
+                        {"frame": frame.filename, "status": "failed", "detail": "No solution found"}
                     )
 
                 with _platesolve_lock:

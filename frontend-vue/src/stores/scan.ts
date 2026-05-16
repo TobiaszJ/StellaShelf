@@ -25,8 +25,7 @@ export const useScanStore = defineStore('scan', () => {
 
   const phaseLabel = computed(() => {
     switch (state.value.phase) {
-      case 'scanning': return 'Scanne FITS-Header...'
-      case 'importing': return 'Importiere in Datenbank...'
+      case 'scanning': return 'Scanne und importiere...'
       case 'done': return 'Scan abgeschlossen'
       case 'error': return 'Fehler beim Scan'
       default: return ''

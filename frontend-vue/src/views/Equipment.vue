@@ -69,7 +69,7 @@ const sortIndicator = (key: string) => {
 }
 
 function viewFrames(filterName: string) {
-  router.push({ name: 'sessions', query: { filter: filterName } })
+  router.push({ name: 'sessions', query: { filter_name: filterName } })
 }
 </script>
 

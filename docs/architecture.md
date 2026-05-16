@@ -152,15 +152,16 @@ src/stellashelf/
 ├── scanner.py      # FITS header extraction, session grouping, thumbnail generation, platesolving
 ├── db.py           # SQLAlchemy models (Target, Session, Frame, Camera, Telescope, CalibrationFile, Setting)
 ├── importer.py     # Centralized import pipeline (CLI & API)
+├── catalog.py      # Object name normalization (M51, M 51, m51 → M 51)
 ├── cli.py          # Click CLI commands
 ├── api.py          # FastAPI REST API (20+ endpoints) + Vue 3 SPA serving + background tasks
 └── config.py       # Centralized configuration (paths, defaults)
 
 frontend-vue/
 └── src/
-    ├── views/      # 12 Vue views: Dashboard, Targets, TargetDetail, Sessions, SessionDetail,
+    ├── views/      # 11 Vue views: Dashboard, Targets, TargetDetail, Sessions, SessionDetail,
     │               #   Equipment, Search, Scan, Settings, Platesolve, Help
-    ├── stores/     # 3 Pinia stores (api, scan, theme)
+    ├── stores/     # 4 Pinia stores (api, scan, theme, platesolve)
     ├── components/ # Reusable components (StatCard, Pagination)
     └── router/     # Vue Router with 11 routes
 ```
@@ -179,11 +180,17 @@ The `ImporterService` in `importer.py` centralizes all import logic, eliminating
 | `/api/v1/targets/{id}` | GET | Target details |
 | `/api/v1/targets/{id}/sessions` | GET | Sessions for a target |
 | `/api/v1/targets/{id}/thumbnails` | GET | Recent frame thumbnails |
-| `/api/v1/sessions` | GET | List sessions (paginated, filterable) |
+| `/api/v1/targets/duplicates` | GET | Find duplicate targets based on normalized name |
+| `/api/v1/targets/merge` | POST | Merge source target into destination target |
+| `/api/v1/targets/merge-group` | POST | Auto-merge all targets with the same canonical name |
+| `/api/v1/sessions` | GET | List sessions (paginated, filterable by status/dates/filter_name) |
 | `/api/v1/sessions/{id}` | GET | Session details |
 | `/api/v1/sessions/{id}/stats` | GET | Per-filter and per-type aggregates |
-| `/api/v1/frames` | GET | List frames (paginated, filterable, `has_coordinates`) |
+| `/api/v1/sessions/{id}` | PATCH | Update session metadata (e.g. status) |
+| `/api/v1/frames` | GET | List frames (paginated, filterable, filename/path search) |
+| `/api/v1/frames/{id}` | GET | Full metadata for a single frame |
 | `/api/v1/frames/{id}/thumbnail` | GET | JPEG thumbnail |
+| `/api/v1/frames/delete` | POST | Bulk delete frames by list of IDs |
 | `/api/v1/cameras` | GET | Cameras with usage stats |
 | `/api/v1/telescopes` | GET | Telescopes with usage stats |
 | `/api/v1/filters` | GET | Filter usage statistics |
@@ -192,7 +199,10 @@ The `ImporterService` in `importer.py` centralizes all import logic, eliminating
 | `/api/v1/scan/status` | GET | Scan progress |
 | `/api/v1/platesolve` | POST | Start ASTAP platesolving (background task) |
 | `/api/v1/platesolve/status` | GET | Get platesolve progress |
+| `/api/v1/platesolve/cancel` | POST | Cancel a running platesolve operation |
 | `/api/v1/settings` | GET/POST | Application configuration |
+| `/api/v1/db/reset` | POST | Delete all data and recreate tables |
+| `/api/v1/db/cleanup-orphans` | POST | Remove orphaned sessions, targets, and equipment |
 
 ### Frontend Routes
 

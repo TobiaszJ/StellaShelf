@@ -25,6 +25,20 @@ const previewLoading = ref(false)
 
 const sessionId = computed(() => parseInt(route.params.id as string))
 
+const statusUpdating = ref(false)
+
+async function updateStatus(newStatus: string) {
+  statusUpdating.value = true
+  try {
+    await apiStore.patch(`/sessions/${sessionId.value}`, { status: newStatus })
+    if (session.value) session.value.status = newStatus
+  } catch (e: any) {
+    alert('Fehler: ' + (e.response?.data?.detail || e.message))
+  } finally {
+    statusUpdating.value = false
+  }
+}
+
 function toggleSort(col: string) {
   if (sortBy.value === col) {
     sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
@@ -184,7 +198,11 @@ const metadataEntries = computed(() => {
         {{ session.camera_name || '-' }}
         <span v-if="session.date_obs"> &middot; {{ new Date(session.date_obs).toLocaleDateString('de-CH') }}</span>
         &middot; {{ session.total_exposure_h }}h &middot; {{ session.frame_count }} Frames
-        <span :class="['badge', `badge-${session.status}`]">{{ session.status }}</span>
+        <select class="status-select" :value="session.status" @change="updateStatus(($event.target as HTMLSelectElement).value)" :disabled="statusUpdating">
+          <option value="raw">Raw</option>
+          <option value="calibrated">Kalibriert</option>
+          <option value="stacked">Gestackt</option>
+        </select>
       </p>
     </div>
 
@@ -456,5 +474,19 @@ const metadataEntries = computed(() => {
   color: var(--text);
   word-break: break-all;
   font-family: monospace;
+}
+.status-select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  margin-left: 6px;
+  cursor: pointer;
+}
+.status-select:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 </style>

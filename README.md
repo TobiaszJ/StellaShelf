@@ -65,6 +65,7 @@ src/stellashelf/
 ├── scanner.py      # FITS header extraction, session grouping, thumbnail generation, platesolving
 ├── db.py           # SQLAlchemy models (Target, Session, Frame, Camera, Telescope, Setting)
 ├── importer.py     # Centralized import pipeline (CLI & API)
+├── catalog.py      # Object name normalization (M51, M 51, m51 → M 51)
 ├── cli.py          # Click CLI commands
 ├── api.py          # FastAPI REST API + Vue 3 SPA serving (20+ endpoints)
 └── config.py       # Centralized configuration (paths, defaults)
@@ -72,7 +73,7 @@ src/stellashelf/
 frontend-vue/
 └── src/
     ├── views/      # 11 Vue views (Dashboard, Targets, TargetDetail, Sessions, SessionDetail, Equipment, Search, Scan, Settings, Platesolve, Help)
-    ├── stores/     # Pinia stores (api, scan, theme)
+    ├── stores/     # Pinia stores (api, scan, theme, platesolve)
     ├── components/ # Reusable components (StatCard, Pagination)
     └── router/     # Vue Router with 11 routes
 ```
@@ -109,11 +110,17 @@ frontend-vue/
 | `/api/v1/targets/{id}` | GET | Target details with session count and exposure totals |
 | `/api/v1/targets/{id}/sessions` | GET | Sessions for a target (paginated) |
 | `/api/v1/targets/{id}/thumbnails` | GET | Recent frame thumbnails for a target |
-| `/api/v1/sessions` | GET | List sessions (paginated, filterable by status/dates) |
+| `/api/v1/targets/duplicates` | GET | Find duplicate targets based on normalized name |
+| `/api/v1/targets/merge` | POST | Merge two targets (source → destination) |
+| `/api/v1/targets/merge-group` | POST | Auto-merge all targets with the same canonical name |
+| `/api/v1/sessions` | GET | List sessions (paginated, filterable by status/dates/filter_name) |
 | `/api/v1/sessions/{id}` | GET | Session details |
 | `/api/v1/sessions/{id}/stats` | GET | Aggregated stats (frames per type, exposure per filter) |
-| `/api/v1/frames` | GET | List frames (paginated, filterable, optional `has_coordinates`) |
+| `/api/v1/sessions/{id}` | PATCH | Update session metadata (e.g. status) |
+| `/api/v1/frames` | GET | List frames (paginated, filterable, optional `has_coordinates`, filename/path search) |
+| `/api/v1/frames/{id}` | GET | Full metadata for a single frame |
 | `/api/v1/frames/{id}/thumbnail` | GET | JPEG thumbnail for a specific frame |
+| `/api/v1/frames/delete` | POST | Bulk delete frames by list of IDs |
 | `/api/v1/cameras` | GET | Camera catalog with usage stats |
 | `/api/v1/telescopes` | GET | Telescope catalog with usage stats |
 | `/api/v1/filters` | GET | Filter usage statistics |
@@ -122,7 +129,10 @@ frontend-vue/
 | `/api/v1/scan/status` | GET | Get scan progress |
 | `/api/v1/platesolve` | POST | Start ASTAP platesolving on unplated frames |
 | `/api/v1/platesolve/status` | GET | Get platesolve progress |
+| `/api/v1/platesolve/cancel` | POST | Cancel a running platesolve operation |
 | `/api/v1/settings` | GET/POST | Application settings (key/value) |
+| `/api/v1/db/reset` | POST | Delete all data and recreate tables |
+| `/api/v1/db/cleanup-orphans` | POST | Remove orphaned sessions, targets, and equipment |
 
 ## Supported FITS Formats
 
