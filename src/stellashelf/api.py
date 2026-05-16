@@ -936,7 +936,11 @@ def get_target_sessions(
         total = q.count()
         pages = (total + page_size - 1) // page_size
 
-        allowed_sort = {"date_obs": ObsSession.date_obs, "total_exposure_h": ObsSession.total_exposure_h, "frame_count": ObsSession.frame_count}
+        allowed_sort = {
+            "date_obs": ObsSession.date_obs,
+            "total_exposure_h": ObsSession.total_exposure_h,
+            "frame_count": ObsSession.frame_count,
+        }
         order_col = allowed_sort.get(sort_by, ObsSession.date_obs)
         order_col = order_col.desc() if sort_order == "desc" else order_col.asc()
 
@@ -955,10 +959,7 @@ def get_target_sessions(
                 frame_count=r.frame_count,
                 folder_path=r.folder_path,
             )
-            for r in q.order_by(order_col)
-            .offset((page - 1) * page_size)
-            .limit(page_size)
-            .all()
+            for r in q.order_by(order_col).offset((page - 1) * page_size).limit(page_size).all()
         ]
 
         return SessionListResponse(
@@ -1016,8 +1017,7 @@ def list_sessions(
             q = q.filter(
                 ObsSession.id.in_(
                     session.query(Frame.session_id).filter(
-                        Frame.session_id.isnot(None),
-                        Frame.filter_name == filter_name
+                        Frame.session_id.isnot(None), Frame.filter_name == filter_name
                     )
                 )
             )
@@ -1039,7 +1039,16 @@ def list_sessions(
         total = q.count()
         pages = (total + page_size - 1) // page_size
 
-        _allowed_session_sort = {"date_obs": ObsSession.date_obs, "total_exposure_h": ObsSession.total_exposure_h, "total_exposure_s": ObsSession.total_exposure_s, "frame_count": ObsSession.frame_count, "target_id": ObsSession.target_id, "camera_id": ObsSession.camera_id, "status": ObsSession.status, "group_key": ObsSession.group_key}
+        _allowed_session_sort = {
+            "date_obs": ObsSession.date_obs,
+            "total_exposure_h": ObsSession.total_exposure_h,
+            "total_exposure_s": ObsSession.total_exposure_s,
+            "frame_count": ObsSession.frame_count,
+            "target_id": ObsSession.target_id,
+            "camera_id": ObsSession.camera_id,
+            "status": ObsSession.status,
+            "group_key": ObsSession.group_key,
+        }
         order_col = _allowed_session_sort.get(sort_by, ObsSession.date_obs)
         order_col = order_col.desc() if sort_order == "desc" else order_col.asc()
 
@@ -1215,13 +1224,17 @@ def list_frames(
 
         if filename:
             raw = filename.replace("\\", "\\\\")
-            like_pattern = raw.replace("_", "\\_").replace("%", "\\%").replace("*", "%").replace("?", "_")
+            like_pattern = (
+                raw.replace("_", "\\_").replace("%", "\\%").replace("*", "%").replace("?", "_")
+            )
             if "%" not in like_pattern:
                 like_pattern = f"%{like_pattern}%"
             q = q.filter(Frame.filename.ilike(like_pattern, escape="\\"))
         if filepath:
             raw = filepath.replace("\\", "\\\\")
-            like_pattern = raw.replace("_", "\\_").replace("%", "\\%").replace("*", "%").replace("?", "_")
+            like_pattern = (
+                raw.replace("_", "\\_").replace("%", "\\%").replace("*", "%").replace("?", "_")
+            )
             if "%" not in like_pattern:
                 like_pattern = f"%{like_pattern}%"
             q = q.filter(Frame.filepath.ilike(like_pattern, escape="\\"))
@@ -1229,7 +1242,21 @@ def list_frames(
         total = q.count()
         pages = (total + page_size - 1) // page_size
 
-        _allowed_frame_sort = {"date_obs": Frame.date_obs, "filename": Frame.filename, "frame_type": Frame.frame_type, "filter_name": Frame.filter_name, "exposure": Frame.exposure, "gain": Frame.gain, "ccd_temp": Frame.ccd_temp, "binning": Frame.binning, "object_name": Frame.object_name, "filepath": Frame.filepath, "session_id": Frame.session_id, "date_local": Frame.date_local, "file_size": Frame.file_size}
+        _allowed_frame_sort = {
+            "date_obs": Frame.date_obs,
+            "filename": Frame.filename,
+            "frame_type": Frame.frame_type,
+            "filter_name": Frame.filter_name,
+            "exposure": Frame.exposure,
+            "gain": Frame.gain,
+            "ccd_temp": Frame.ccd_temp,
+            "binning": Frame.binning,
+            "object_name": Frame.object_name,
+            "filepath": Frame.filepath,
+            "session_id": Frame.session_id,
+            "date_local": Frame.date_local,
+            "file_size": Frame.file_size,
+        }
         order_col = _allowed_frame_sort.get(sort_by, Frame.date_obs)
         order_col = order_col.desc() if sort_order == "desc" else order_col.asc()
 
@@ -1257,7 +1284,7 @@ def get_frame(frame_id: int):
 @app.get("/api/v1/frames/{frame_id}/thumbnail")
 def get_frame_thumbnail(frame_id: int, preview: bool = Query(False)):
     """Get a JPEG thumbnail for a specific frame.
-    
+
     Normal (preview=false): max 200px, quick thumbnail.
     Preview (preview=true): ~25% of original resolution for the popup viewer.
     """
@@ -1346,9 +1373,7 @@ def delete_frames(req: FrameDeleteRequest):
             if f.session_id:
                 affected_session_ids.add(f.session_id)
 
-        session.query(Frame).filter(Frame.id.in_(req.frame_ids)).delete(
-            synchronize_session="fetch"
-        )
+        session.query(Frame).filter(Frame.id.in_(req.frame_ids)).delete(synchronize_session="fetch")
 
         if affected_session_ids:
             from sqlalchemy import update as sa_update
@@ -1374,37 +1399,63 @@ def delete_frames(req: FrameDeleteRequest):
 
         _cleanup_orphans(session)
 
-    return {"status": "ok", "deleted": len(req.frame_ids), "affected_sessions": len(affected_session_ids)}
+    return {
+        "status": "ok",
+        "deleted": len(req.frame_ids),
+        "affected_sessions": len(affected_session_ids),
+    }
 
 
 def _cleanup_orphans(session):
     """Delete orphaned sessions (no frames), targets (no sessions), and unused equipment."""
     # Orphaned sessions
-    orphan_sessions = session.query(ObsSession).filter(
-        ~ObsSession.id.in_(session.query(Frame.session_id).filter(Frame.session_id.isnot(None)))
-    ).all()
+    orphan_sessions = (
+        session.query(ObsSession)
+        .filter(
+            ~ObsSession.id.in_(session.query(Frame.session_id).filter(Frame.session_id.isnot(None)))
+        )
+        .all()
+    )
     orphan_session_ids = [s.id for s in orphan_sessions]
     for s in orphan_sessions:
         session.delete(s)
 
     # Orphaned targets
-    orphan_targets = session.query(Target).filter(
-        ~Target.id.in_(session.query(ObsSession.target_id).filter(ObsSession.target_id.isnot(None)))
-    ).all()
+    orphan_targets = (
+        session.query(Target)
+        .filter(
+            ~Target.id.in_(
+                session.query(ObsSession.target_id).filter(ObsSession.target_id.isnot(None))
+            )
+        )
+        .all()
+    )
     for t in orphan_targets:
         session.delete(t)
 
     # Orphaned cameras
-    orphan_cameras = session.query(Camera).filter(
-        ~Camera.id.in_(session.query(ObsSession.camera_id).filter(ObsSession.camera_id.isnot(None)))
-    ).all()
+    orphan_cameras = (
+        session.query(Camera)
+        .filter(
+            ~Camera.id.in_(
+                session.query(ObsSession.camera_id).filter(ObsSession.camera_id.isnot(None))
+            )
+        )
+        .all()
+    )
     for c in orphan_cameras:
         session.delete(c)
 
     # Orphaned telescopes
-    orphan_telescopes = session.query(Telescope).filter(
-        ~Telescope.id.in_(session.query(ObsSession.telescope_id).filter(ObsSession.telescope_id.isnot(None)))
-    ).all()
+    orphan_telescopes = (
+        session.query(Telescope)
+        .filter(
+            ~Telescope.id.in_(
+                session.query(ObsSession.telescope_id).filter(ObsSession.telescope_id.isnot(None))
+            )
+        )
+        .all()
+    )
     for t in orphan_telescopes:
         session.delete(t)
 
@@ -1704,22 +1755,22 @@ def _run_platesolve_task():
             sess.commit()
 
         with _platesolve_lock:
-            _platesolve_state["phase"] = "done" if not _platesolve_state.get("cancelled") else "cancelled"
+            _platesolve_state["phase"] = (
+                "done" if not _platesolve_state.get("cancelled") else "cancelled"
+            )
             _platesolve_state["solved"] = solved
             _platesolve_state["failed"] = failed
             _platesolve_state["log"] = log_entries
             _platesolve_state["running"] = False
 
     except Exception as e:
-
         with _platesolve_lock:
             _platesolve_state["running"] = False
             _platesolve_state["phase"] = "error"
             _platesolve_state["error"] = str(e)
-            _platesolve_state["log"] = (
-                _platesolve_state.get("log", [])
-                + [{"frame": "", "status": "error", "detail": str(e)}]
-            )
+            _platesolve_state["log"] = _platesolve_state.get("log", []) + [
+                {"frame": "", "status": "error", "detail": str(e)}
+            ]
 
 
 # ---------------------------------------------------------------------------

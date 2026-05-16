@@ -190,9 +190,7 @@ class TestMerge:
         assert resp.status_code == 404
 
     def test_merge_group_no_duplicates(self, client):
-        resp = client.post(
-            "/api/v1/targets/merge-group", json={"canonical_name": "M 51"}
-        )
+        resp = client.post("/api/v1/targets/merge-group", json={"canonical_name": "M 51"})
         assert resp.status_code == 400
 
 
@@ -241,4 +239,5 @@ class TestPlatesolve:
 class TestVersion:
     def test_app_version(self, client):
         from stellashelf import __version__
+
         assert app.version == __version__
