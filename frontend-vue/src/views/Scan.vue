@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useScanStore } from '@/stores/scan'
 import { useApiStore } from '@/stores/api'
 import { useI18n } from 'vue-i18n'
+import FramePreviewModal from '@/components/FramePreviewModal.vue'
 
 const { t } = useI18n()
 const scanStore = useScanStore()
@@ -21,6 +22,14 @@ const cleanupBusy = ref(false)
 const cleanupConfirming = ref(false)
 const cleanupOrphansBusy = ref(false)
 const cleanupOrphanResult = ref<string | null>(null)
+
+const previewFrameId = ref<number | null>(null)
+function openPreview(id: number) {
+  previewFrameId.value = id
+}
+function closePreview() {
+  previewFrameId.value = null
+}
 
 onMounted(async () => {
   try {
@@ -280,20 +289,20 @@ async function cleanupOrphans() {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="f in cleanupResults" :key="f.id">
-                  <td>
-                    <input
-                      type="checkbox"
-                      :checked="cleanupSelected.has(f.id)"
-                      @change="toggleSelect(f.id)"
-                    />
-                  </td>
-                  <td class="cell-monospace">{{ f.filename }}</td>
-                  <td><span class="badge badge-light">{{ f.frame_type }}</span></td>
-                  <td>{{ f.filter_name || '-' }}</td>
-                  <td>{{ f.exposure ? f.exposure + 's' : '-' }}</td>
-                  <td class="cell-monospace cell-path">{{ f.filepath }}</td>
-                </tr>
+              <tr v-for="f in cleanupResults" :key="f.id" class="clickable" @click="openPreview(f.id)">
+                <td @click.stop>
+                  <input
+                    type="checkbox"
+                    :checked="cleanupSelected.has(f.id)"
+                    @change="toggleSelect(f.id)"
+                  />
+                </td>
+                <td class="cell-monospace">{{ f.filename }}</td>
+                <td><span class="badge badge-light">{{ f.frame_type }}</span></td>
+                <td>{{ f.filter_name || '-' }}</td>
+                <td>{{ f.exposure ? f.exposure + 's' : '-' }}</td>
+                <td class="cell-monospace cell-path">{{ f.filepath }}</td>
+              </tr>
               </tbody>
             </table>
           </div>
@@ -318,6 +327,8 @@ async function cleanupOrphans() {
         </div>
       </div>
     </template>
+
+    <FramePreviewModal :frameId="previewFrameId" @close="closePreview" />
   </div>
 </template>
 

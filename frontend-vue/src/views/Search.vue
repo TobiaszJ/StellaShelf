@@ -3,6 +3,7 @@ import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useApiStore } from '@/stores/api'
 import { useI18n } from 'vue-i18n'
+import FramePreviewModal from '@/components/FramePreviewModal.vue'
 
 const { t } = useI18n()
 const apiStore = useApiStore()
@@ -10,6 +11,7 @@ const router = useRouter()
 const query = ref('')
 const results = ref<any>(null)
 const activeTab = ref('all')
+const previewFrameId = ref<number | null>(null)
 
 async function search() {
   if (!query.value.trim()) {
@@ -103,20 +105,21 @@ watch(query, (val) => {
           <table class="data-table">
             <thead><tr><th>{{ $t('search.col_file') }}</th><th>{{ $t('search.col_target_name') }}</th><th>{{ $t('search.col_type') }}</th></tr></thead>
             <tbody>
-              <tr v-for="f in results.frames" :key="f.id">
-                <td style="font-family: monospace; font-size: 12px;">{{ f.filename }}</td>
-                <td>{{ f.object_name }}</td>
-                <td><span :class="'badge badge-' + f.frame_type.toLowerCase()">{{ f.frame_type }}</span></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <p v-else class="empty">{{ $t('search.empty_frames') }}</p>
+            <tr v-for="f in results.frames" :key="f.id" class="clickable" @click="previewFrameId = f.id">
+              <td style="font-family: monospace; font-size: 12px;">{{ f.filename }}</td>
+              <td>{{ f.object_name }}</td>
+              <td><span :class="'badge badge-' + f.frame_type.toLowerCase()">{{ f.frame_type }}</span></td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
+    </div>
 
-    <p v-else-if="query && !results" class="loading">{{ $t('search.searching') }}</p>
-    <p v-else class="empty">{{ $t('search.start_hint') }}</p>
+    <p v-else-if="query && !results" class="loading">{{ t('search.searching') }}</p>
+    <p v-else class="empty">{{ t('search.start_hint') }}</p>
+
+    <FramePreviewModal :frameId="previewFrameId" @close="previewFrameId = null" />
   </div>
 </template>
 

@@ -10,6 +10,7 @@ import { useIdentifyStore } from '@/stores/identify'
 import { useThemeStore } from '@/stores/theme'
 import { useApiStore } from '@/stores/api'
 import { i18n, setLocale } from '@/i18n'
+import { frontendVersion } from '@/version'
 
 const scanStore = useScanStore()
 const platesolveStore = usePlatesolveStore()
@@ -23,6 +24,8 @@ const router = useRouter()
 const sidebarOpen = ref(false)
 const currentLocale = ref(i18n.global.locale.value)
 const buildInfo = ref('')
+const versionMismatch = ref(false)
+const backendVersion = ref('')
 
 function switchLocale() {
   const next = currentLocale.value === 'de' ? 'en' : 'de'
@@ -34,6 +37,10 @@ async function loadBuildInfo() {
   try {
     const health = await apiStore.fetch<{ version: string; build: string }>('/health')
     buildInfo.value = health.build
+    backendVersion.value = health.version
+    if (health.version !== frontendVersion) {
+      versionMismatch.value = true
+    }
   } catch {
     buildInfo.value = 'dev'
   }
@@ -83,7 +90,18 @@ function toggleTheme() {
 </script>
 
 <template>
-  <div class="app-layout">
+  <!-- Version mismatch overlay -->
+  <div v-if="versionMismatch" class="version-mismatch">
+    <div class="version-mismatch-card">
+      <h2>⚠ Version mismatch</h2>
+      <p>Frontend v{{ frontendVersion }} kann nicht mit Backend v{{ backendVersion }} kommunizieren.</p>
+      <p style="margin-top: 8px; font-size: 13px; color: var(--text-muted);">
+        Bitte Seite neu laden oder Server aktualisieren.
+      </p>
+    </div>
+  </div>
+
+  <div v-else class="app-layout">
     <!-- Mobile overlay -->
     <div class="sidebar-overlay" :class="{ visible: sidebarOpen }" @click="closeSidebar"></div>
 
