@@ -1726,8 +1726,11 @@ def update_settings(settings: list[SettingSchema]):
 
 
 @app.post("/api/v1/platesolve")
-def run_platesolve():
-    """Start ASTAP platesolving on all frames without RA/Dec coordinates (background task)."""
+def run_platesolve(
+    session_id: int | None = Query(None, description="Limit to frames in this session"),
+    target_id: int | None = Query(None, description="Limit to frames of this target"),
+):
+    """Start ASTAP platesolving on frames without RA/Dec coordinates (background task)."""
     with _platesolve_lock:
         if _platesolve_state["running"]:
             raise HTTPException(status_code=409, detail="A platesolve operation is already running")
@@ -1739,7 +1742,9 @@ def run_platesolve():
         _platesolve_state["cancelled"] = False
         _platesolve_state["log"] = []
 
-    thread = threading.Thread(target=_run_platesolve_task, daemon=True)
+    thread = threading.Thread(
+        target=_run_platesolve_task, args=(session_id, target_id), daemon=True
+    )
     thread.start()
 
     return {"status": "started"}
@@ -1760,7 +1765,7 @@ def cancel_platesolve():
     return {"status": "cancelling"}
 
 
-def _run_platesolve_task():
+def _run_platesolve_task(session_id: int | None = None, target_id: int | None = None):
     """Background thread task for platesolving."""
     global _platesolve_state
     try:
@@ -1772,9 +1777,16 @@ def _run_platesolve_task():
             if setting and setting.value:
                 astap_binary = setting.value
 
-            unplated = (
-                sess.query(Frame).filter(Frame.ra_deg.is_(None), Frame.dec_deg.is_(None)).all()
-            )
+            q = sess.query(Frame).filter(Frame.ra_deg.is_(None), Frame.dec_deg.is_(None))
+            if session_id is not None:
+                q = q.filter(Frame.session_id == session_id)
+            if target_id is not None:
+                q = q.filter(
+                    Frame.session_id.in_(
+                        sess.query(ObsSession.id).filter(ObsSession.target_id == target_id)
+                    )
+                )
+            unplated = q.all()
 
             total = len(unplated)
             solved = 0
@@ -1882,8 +1894,14 @@ def _run_platesolve_task():
 
 
 @app.post("/api/v1/analyse")
-def run_analyse():
-    """Start ASTAP analysis on all LIGHT frames without HFD data (background task)."""
+def run_analyse(
+    force: bool = Query(
+        False, description="Re-analyse all LIGHT frames, including already analysed ones"
+    ),
+    session_id: int | None = Query(None, description="Limit to frames in this session"),
+    target_id: int | None = Query(None, description="Limit to frames of this target"),
+):
+    """Start ASTAP analysis on LIGHT frames (background task)."""
     with _analyse_lock:
         if _analyse_state["running"]:
             raise HTTPException(status_code=409, detail="An analysis operation is already running")
@@ -1895,7 +1913,9 @@ def run_analyse():
         _analyse_state["cancelled"] = False
         _analyse_state["log"] = []
 
-    thread = threading.Thread(target=_run_analyse_task, daemon=True)
+    thread = threading.Thread(
+        target=_run_analyse_task, args=(force, session_id, target_id), daemon=True
+    )
     thread.start()
 
     return {"status": "started"}
@@ -1916,7 +1936,9 @@ def cancel_analyse():
     return {"status": "cancelling"}
 
 
-def _run_analyse_task():
+def _run_analyse_task(
+    force: bool = False, session_id: int | None = None, target_id: int | None = None
+):
     """Background thread task for frame quality analysis."""
     global _analyse_state
     try:
@@ -1928,11 +1950,18 @@ def _run_analyse_task():
             if setting and setting.value:
                 astap_binary = setting.value
 
-            unanalysed = (
-                sess.query(Frame)
-                .filter(Frame.frame_type == "LIGHT", Frame.hfd_median.is_(None))
-                .all()
-            )
+            q = sess.query(Frame).filter(Frame.frame_type == "LIGHT")
+            if not force:
+                q = q.filter(Frame.hfd_median.is_(None))
+            if session_id is not None:
+                q = q.filter(Frame.session_id == session_id)
+            if target_id is not None:
+                q = q.filter(
+                    Frame.session_id.in_(
+                        sess.query(ObsSession.id).filter(ObsSession.target_id == target_id)
+                    )
+                )
+            unanalysed = q.all()
 
             total = len(unanalysed)
             analysed = 0
@@ -2026,8 +2055,11 @@ def _run_analyse_task():
 
 
 @app.post("/api/v1/identify")
-def run_identify():
-    """Identify dominant deep-sky objects for all LIGHT frames with RA/Dec."""
+def run_identify(
+    session_id: int | None = Query(None, description="Limit to frames in this session"),
+    target_id: int | None = Query(None, description="Limit to frames of this target"),
+):
+    """Identify dominant deep-sky objects for LIGHT frames with RA/Dec."""
     with _identify_lock:
         if _identify_state["running"]:
             raise HTTPException(status_code=409, detail="An identify operation is already running")
@@ -2039,7 +2071,7 @@ def run_identify():
         _identify_state["cancelled"] = False
         _identify_state["log"] = []
 
-    thread = threading.Thread(target=_run_identify_task, daemon=True)
+    thread = threading.Thread(target=_run_identify_task, args=(session_id, target_id), daemon=True)
     thread.start()
     return {"status": "started"}
 
@@ -2057,21 +2089,26 @@ def cancel_identify():
     return {"status": "cancelling"}
 
 
-def _run_identify_task():
+def _run_identify_task(session_id: int | None = None, target_id: int | None = None):
     """Background task: identify all LIGHT frames with RA/Dec."""
     global _identify_state
     try:
         engine, SessionLocal = get_session_local()
         with SessionLocal() as sess:
-            frames = (
-                sess.query(Frame)
-                .filter(
-                    Frame.frame_type == "LIGHT",
-                    Frame.ra_deg.isnot(None),
-                    Frame.dec_deg.isnot(None),
-                )
-                .all()
+            q = sess.query(Frame).filter(
+                Frame.frame_type == "LIGHT",
+                Frame.ra_deg.isnot(None),
+                Frame.dec_deg.isnot(None),
             )
+            if session_id is not None:
+                q = q.filter(Frame.session_id == session_id)
+            if target_id is not None:
+                q = q.filter(
+                    Frame.session_id.in_(
+                        sess.query(ObsSession.id).filter(ObsSession.target_id == target_id)
+                    )
+                )
+            frames = q.all()
 
             total = len(frames)
             identified = 0

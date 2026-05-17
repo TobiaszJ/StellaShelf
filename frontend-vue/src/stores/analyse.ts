@@ -66,8 +66,10 @@ export const useAnalyseStore = defineStore('analyse', () => {
     }
   }
 
-  async function startAnalyse() {
-    const res = await apiStore.post<{ status: string }>('/analyse', {})
+  async function startAnalyse(force: boolean = false) {
+    const params: Record<string, any> = {}
+    if (force) params.force = 'true'
+    const res = await apiStore.fetch<{ status: string }>('/analyse', params)
     state.value = {
       running: true,
       total: 0,

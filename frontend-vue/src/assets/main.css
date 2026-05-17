@@ -226,6 +226,12 @@ a:hover { text-decoration: underline; }
 
 .nav-item svg { width: 18px; height: 18px; flex-shrink: 0; }
 
+.nav-separator {
+  height: 1px;
+  background: var(--border);
+  margin: 6px 12px;
+}
+
 .top-bar {
   display: none;
 }

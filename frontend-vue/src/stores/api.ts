@@ -131,11 +131,11 @@ export const useApiStore = defineStore('api', () => {
     }
   }
 
-  async function post<T>(url: string, data: any): Promise<T> {
+  async function post<T>(url: string, data: any, params?: Record<string, any>): Promise<T> {
     loading.value = true
     error.value = null
     try {
-      const res = await api.post(url, data)
+      const res = await api.post(url, data, params ? { params } : {})
       return res.data
     } catch (e: any) {
       error.value = e.response?.data?.detail || e.message

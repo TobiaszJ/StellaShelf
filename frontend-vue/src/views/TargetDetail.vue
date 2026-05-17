@@ -28,6 +28,20 @@ const mergeLoading = ref(false)
 
 const targetId = computed(() => parseInt(route.params.id as string))
 
+const taskBusy = ref(false)
+
+async function runTask(task: string) {
+  taskBusy.value = true
+  try {
+    await apiStore.post(`/${task}`, {}, { target_id: targetId.value })
+    router.push({ name: task })
+  } catch (e: any) {
+    alert(t('error.generic', { message: e.response?.data?.detail || e.message }))
+  } finally {
+    taskBusy.value = false
+  }
+}
+
 async function loadTarget() {
   try {
     target.value = await apiStore.fetch(`/targets/${targetId.value}`)
@@ -189,6 +203,11 @@ watch(mergeSearch, searchMergeTargets)
           {{ $t('target_detail.merge_button') }}
         </button>
       </div>
+      <div class="task-toolbar" v-if="target">
+        <button class="btn btn-sm btn-outline" :disabled="taskBusy" @click="runTask('platesolve')">🔍 Platesolve</button>
+        <button class="btn btn-sm btn-outline" :disabled="taskBusy" @click="runTask('analyse')">📊 Analyse</button>
+        <button class="btn btn-sm btn-outline" :disabled="taskBusy" @click="runTask('identify')">🎯 Identify</button>
+      </div>
     </div>
 
     <!-- Merge Dialog -->
@@ -316,6 +335,12 @@ watch(mergeSearch, searchMergeTargets)
 </template>
 
 <style scoped>
+.task-toolbar {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
 .page-header-row {
   display: flex;
   justify-content: space-between;

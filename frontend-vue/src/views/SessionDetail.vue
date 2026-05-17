@@ -112,6 +112,20 @@ function closePreview() {
   previewFrameId.value = null
 }
 
+const taskBusy = ref(false)
+
+async function runTask(task: string) {
+  taskBusy.value = true
+  try {
+    await apiStore.post(`/${task}`, {}, { session_id: sessionId.value })
+    router.push({ name: task })
+  } catch (e: any) {
+    alert(t('error.generic', { message: e.response?.data?.detail || e.message }))
+  } finally {
+    taskBusy.value = false
+  }
+}
+
 watch([page, frameTypeFilter, sortBy, sortOrder], loadFrames)
 
 onMounted(() => {
@@ -152,6 +166,11 @@ const frameTypes = computed(() => {
           <option value="stacked">{{ $t('session_detail.status_stacked') }}</option>
         </select>
       </p>
+      <div class="task-toolbar" v-if="session">
+        <button class="btn btn-sm btn-outline" :disabled="taskBusy" @click="runTask('platesolve')">🔍 Platesolve</button>
+        <button class="btn btn-sm btn-outline" :disabled="taskBusy" @click="runTask('analyse')">📊 Analyse</button>
+        <button class="btn btn-sm btn-outline" :disabled="taskBusy" @click="runTask('identify')">🎯 Identify</button>
+      </div>
     </div>
 
     <!-- Aggregate cards -->
@@ -308,6 +327,12 @@ const frameTypes = computed(() => {
   color: var(--text-muted);
 }
 
+.task-toolbar {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
 .status-select {
   background: var(--surface);
   border: 1px solid var(--border);

@@ -124,6 +124,10 @@ function toggleTheme() {
           <LayoutDashboard :size="18" />
           <span class="nav-label">{{ t('nav.dashboard') }}</span>
         </RouterLink>
+        <RouterLink to="/search" class="nav-item" @click="closeSidebar">
+          <Search :size="18" />
+          <span class="nav-label">{{ t('nav.search') }}</span>
+        </RouterLink>
         <RouterLink to="/targets" class="nav-item" @click="closeSidebar">
           <Target :size="18" />
           <span class="nav-label">{{ t('nav.targets') }}</span>
@@ -136,29 +140,31 @@ function toggleTheme() {
           <Camera :size="18" />
           <span class="nav-label">{{ t('nav.equipment') }}</span>
         </RouterLink>
-        <RouterLink to="/search" class="nav-item" @click="closeSidebar">
-          <Search :size="18" />
-          <span class="nav-label">{{ t('nav.search') }}</span>
-        </RouterLink>
+
+        <div class="nav-separator"></div>
+
         <RouterLink to="/scan" class="nav-item" @click="closeSidebar">
           <ScanLine :size="18" />
           <span class="nav-label">{{ t('nav.scan') }}</span>
-        </RouterLink>
-        <RouterLink to="/settings" class="nav-item" @click="closeSidebar">
-          <SettingsIcon :size="18" />
-          <span class="nav-label">{{ t('nav.settings') }}</span>
         </RouterLink>
         <RouterLink to="/platesolve" class="nav-item" @click="closeSidebar">
           <Globe :size="18" />
           <span class="nav-label">{{ t('nav.platesolve') }}</span>
         </RouterLink>
+        <RouterLink to="/identify" class="nav-item" @click="closeSidebar">
+          <Crosshair :size="18" />
+          <span class="nav-label">{{ t('nav.identify') }}</span>
+        </RouterLink>
         <RouterLink to="/analyse" class="nav-item" @click="closeSidebar">
           <Activity :size="18" />
           <span class="nav-label">{{ t('nav.analyse') }}</span>
         </RouterLink>
-        <RouterLink to="/identify" class="nav-item" @click="closeSidebar">
-          <Crosshair :size="18" />
-          <span class="nav-label">{{ t('nav.identify') }}</span>
+
+        <div class="nav-separator"></div>
+
+        <RouterLink to="/settings" class="nav-item" @click="closeSidebar">
+          <SettingsIcon :size="18" />
+          <span class="nav-label">{{ t('nav.settings') }}</span>
         </RouterLink>
         <RouterLink to="/help" class="nav-item" @click="closeSidebar">
           <HelpCircle :size="18" />
