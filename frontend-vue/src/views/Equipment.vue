@@ -2,8 +2,10 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useApiStore, type Camera, type Telescope, type FilterStat } from '@/stores/api'
+import { useI18n } from 'vue-i18n'
 import Pagination from '@/components/Pagination.vue'
 
+const { t } = useI18n()
 const apiStore = useApiStore()
 const router = useRouter()
 const activeTab = ref('cameras')
@@ -76,33 +78,33 @@ function viewFrames(filterName: string) {
 <template>
   <div>
     <div class="page-header">
-      <h2>Equipment</h2>
-      <p>{{ totalItems }} Einträge in deiner Sammlung</p>
+      <h2>{{ $t('equipment.title') }}</h2>
+      <p>{{ $t('equipment.description', { count: totalItems }) }}</p>
     </div>
 
     <div class="tabs">
       <button :class="['tab', { active: activeTab === 'cameras' }]" @click="activeTab = 'cameras'; page = 1">
-        Kameras ({{ cameras.length }})
+        {{ $t('equipment.tab_cameras', { count: cameras.length }) }}
       </button>
       <button :class="['tab', { active: activeTab === 'telescopes' }]" @click="activeTab = 'telescopes'; page = 1">
-        Teleskope ({{ telescopes.length }})
+        {{ $t('equipment.tab_telescopes', { count: telescopes.length }) }}
       </button>
       <button :class="['tab', { active: activeTab === 'filters' }]" @click="activeTab = 'filters'; page = 1">
-        Filter ({{ filters.length }})
+        {{ $t('equipment.tab_filters', { count: filters.length }) }}
       </button>
     </div>
 
     <!-- Cameras -->
     <div class="card" v-if="activeTab === 'cameras'">
-      <h3>Kameras</h3>
+      <h3>{{ $t('equipment.tab_cameras', { count: cameras.length }) }}</h3>
       <div class="table-responsive">
         <table class="data-table">
           <thead>
             <tr>
-              <th class="sortable" @click="toggleSort('name')">Name{{ sortIndicator('name') }}</th>
-              <th class="sortable" @click="toggleSort('pixel_size_um')">Pixel{{ sortIndicator('pixel_size_um') }}</th>
-              <th class="sortable" @click="toggleSort('frame_count')">Frames{{ sortIndicator('frame_count') }}</th>
-              <th class="sortable" @click="toggleSort('total_exposure_h')">Belichtung{{ sortIndicator('total_exposure_h') }}</th>
+              <th class="sortable" @click="toggleSort('name')">{{ $t('equipment.col_name') }}{{ sortIndicator('name') }}</th>
+              <th class="sortable" @click="toggleSort('pixel_size_um')">{{ $t('equipment.col_pixel') }}{{ sortIndicator('pixel_size_um') }}</th>
+              <th class="sortable" @click="toggleSort('frame_count')">{{ $t('equipment.col_frames') }}{{ sortIndicator('frame_count') }}</th>
+              <th class="sortable" @click="toggleSort('total_exposure_h')">{{ $t('equipment.col_exposure') }}{{ sortIndicator('total_exposure_h') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -119,15 +121,15 @@ function viewFrames(filterName: string) {
 
     <!-- Telescopes -->
     <div class="card" v-if="activeTab === 'telescopes'">
-      <h3>Teleskope</h3>
+      <h3>{{ $t('equipment.tab_telescopes', { count: telescopes.length }) }}</h3>
       <div class="table-responsive">
         <table class="data-table">
           <thead>
             <tr>
-              <th class="sortable" @click="toggleSort('name')">Name{{ sortIndicator('name') }}</th>
-              <th class="sortable" @click="toggleSort('focal_length_mm')">Brennweite{{ sortIndicator('focal_length_mm') }}</th>
-              <th class="sortable" @click="toggleSort('frame_count')">Frames{{ sortIndicator('frame_count') }}</th>
-              <th class="sortable" @click="toggleSort('total_exposure_h')">Belichtung{{ sortIndicator('total_exposure_h') }}</th>
+              <th class="sortable" @click="toggleSort('name')">{{ $t('equipment.col_name') }}{{ sortIndicator('name') }}</th>
+              <th class="sortable" @click="toggleSort('focal_length_mm')">{{ $t('equipment.col_focal') }}{{ sortIndicator('focal_length_mm') }}</th>
+              <th class="sortable" @click="toggleSort('frame_count')">{{ $t('equipment.col_frames') }}{{ sortIndicator('frame_count') }}</th>
+              <th class="sortable" @click="toggleSort('total_exposure_h')">{{ $t('equipment.col_exposure') }}{{ sortIndicator('total_exposure_h') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -144,14 +146,14 @@ function viewFrames(filterName: string) {
 
     <!-- Filters -->
     <div class="card" v-if="activeTab === 'filters'">
-      <h3>Filter</h3>
+      <h3>{{ $t('equipment.tab_filters', { count: filters.length }) }}</h3>
       <div class="table-responsive">
         <table class="data-table">
           <thead>
             <tr>
-              <th class="sortable" @click="toggleSort('name')">Name{{ sortIndicator('name') }}</th>
-              <th class="sortable" @click="toggleSort('frame_count')">Frames{{ sortIndicator('frame_count') }}</th>
-              <th class="sortable" @click="toggleSort('total_exposure_h')">Belichtung{{ sortIndicator('total_exposure_h') }}</th>
+              <th class="sortable" @click="toggleSort('name')">{{ $t('equipment.col_name') }}{{ sortIndicator('name') }}</th>
+              <th class="sortable" @click="toggleSort('frame_count')">{{ $t('equipment.col_frames') }}{{ sortIndicator('frame_count') }}</th>
+              <th class="sortable" @click="toggleSort('total_exposure_h')">{{ $t('equipment.col_exposure') }}{{ sortIndicator('total_exposure_h') }}</th>
             </tr>
           </thead>
           <tbody>

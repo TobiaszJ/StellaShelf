@@ -2,8 +2,10 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useApiStore, type Session, type PaginatedResponse, type Target } from '@/stores/api'
+import { useI18n } from 'vue-i18n'
 import Pagination from '@/components/Pagination.vue'
 
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const apiStore = useApiStore()
@@ -143,7 +145,7 @@ async function doMerge() {
     })
     router.push({ name: 'target-detail', params: { id: mergeDestination.value.id } })
   } catch (e: any) {
-    alert('Fehler beim Zusammenführen: ' + (e.response?.data?.detail || e.message))
+    alert(t('error.generic', { message: e.response?.data?.detail || e.message }))
   } finally {
     mergeBusy.value = false
   }
@@ -162,7 +164,7 @@ watch(mergeSearch, searchMergeTargets)
 <template>
   <div>
     <div class="breadcrumb">
-      <a @click="router.push('/targets')">Targets</a>
+      <a @click="router.push('/targets')">{{ $t('target_detail.title') }}</a>
       <span> / </span>
       <span class="active">{{ target?.name || '...' }}</span>
     </div>
@@ -170,21 +172,21 @@ watch(mergeSearch, searchMergeTargets)
     <div class="page-header">
       <div class="page-header-row">
         <div>
-          <h2>{{ target?.name || 'Loading...' }}</h2>
+          <h2>{{ target?.name || $t('target_detail.loading') }}</h2>
           <p v-if="target">
             <span v-if="target.object_type" :class="['badge', typeBadgeClass(target.object_type)]">
               {{ target.object_type }}
             </span>
             <span v-if="target.constellation" style="margin-left: 8px">
-              Sternbild {{ target.constellation }}
+              {{ $t('target_detail.constellation', { name: target.constellation }) }}
             </span>
             <span v-if="target.alt_names" style="margin-left: 8px; font-size: 12px; color: var(--text-muted);">
-              auch bekannt als: {{ target.alt_names }}
+              {{ $t('target_detail.also_known_as', { names: target.alt_names }) }}
             </span>
           </p>
         </div>
         <button class="btn btn-sm btn-outline" @click="showMergeDialog = true" :disabled="!target">
-          Zusammenführen
+          {{ $t('target_detail.merge_button') }}
         </button>
       </div>
     </div>
@@ -192,21 +194,18 @@ watch(mergeSearch, searchMergeTargets)
     <!-- Merge Dialog -->
     <div v-if="showMergeDialog" class="modal-overlay" @click.self="cancelMerge">
       <div class="modal">
-        <h3>Target zusammenführen</h3>
-        <p style="margin-bottom: 12px; color: var(--text-muted); font-size: 13px;">
-          Dieses Target (<strong>{{ target?.name }}</strong>) mit einem anderen zusammenführen.
-          Alle Sessions und Frames werden auf das Ziel-Target übertragen.
-        </p>
+        <h3>{{ $t('target_detail.merge_title') }}</h3>
+        <p style="margin-bottom: 12px; color: var(--text-muted); font-size: 13px;" v-html="$t('target_detail.merge_description', { name: target?.name })"></p>
 
         <div v-if="!mergeDestination">
-          <label>Ziel-Target suchen</label>
+          <label>{{ $t('target_detail.merge_search_label') }}</label>
           <input
             v-model="mergeSearch"
             type="text"
-            placeholder="Name eingeben..."
+            :placeholder="$t('target_detail.merge_search_placeholder')"
             class="merge-search-input"
           />
-          <div v-if="mergeLoading" class="loading" style="padding: 12px;">Suche...</div>
+          <div v-if="mergeLoading" class="loading" style="padding: 12px;">{{ $t('target_detail.merge_searching') }}</div>
           <div v-else-if="mergeResults.length" class="merge-results">
             <div
               v-for="t in mergeResults"
@@ -216,12 +215,12 @@ watch(mergeSearch, searchMergeTargets)
             >
               <strong>{{ t.name }}</strong>
               <span style="color: var(--text-muted); font-size: 12px;">
-                {{ t.session_count }} Sessions · {{ t.total_exposure_h }}h
+                {{ t.session_count }} {{ $t('target_detail.sessions') }} · {{ t.total_exposure_h }}h
               </span>
             </div>
           </div>
           <p v-else-if="mergeSearch && !mergeLoading" class="empty" style="padding: 12px;">
-            Keine Targets gefunden.
+            {{ $t('target_detail.merge_not_found') }}
           </p>
         </div>
 
@@ -232,16 +231,13 @@ watch(mergeSearch, searchMergeTargets)
               <span class="merge-arrow-sym">→</span>
               <span class="merge-to">{{ mergeDestination.name }}</span>
             </div>
-            <p style="margin-top: 12px;">
-              <strong>{{ target?.name }}</strong> wird in <strong>{{ mergeDestination.name }}</strong> zusammengeführt.
-              <br/>Danach wird <strong>{{ target?.name }}</strong> gelöscht.
-            </p>
+            <p style="margin-top: 12px;" v-html="$t('target_detail.merge_confirm_text', { source: target?.name, dest: mergeDestination.name })"></p>
             <div class="merge-actions">
               <button class="btn" @click="mergeConfirming = true; doMerge()" :disabled="mergeBusy">
-                {{ mergeBusy ? 'Führe zusammen...' : 'Bestätigen & Zusammenführen' }}
+                {{ mergeBusy ? $t('target_detail.merge_busy') : $t('target_detail.merge_confirm') }}
               </button>
               <button class="btn btn-ghost" @click="cancelMerge" :disabled="mergeBusy">
-                Abbrechen
+                {{ $t('target_detail.merge_cancel') }}
               </button>
             </div>
           </div>
@@ -252,24 +248,24 @@ watch(mergeSearch, searchMergeTargets)
     <div class="stats-grid" v-if="target">
       <div class="stat-card">
         <div class="value">{{ target.session_count }}</div>
-        <div class="label">Sessions</div>
+        <div class="label">{{ $t('target_detail.sessions') }}</div>
       </div>
       <div class="stat-card">
         <div class="value">{{ target.total_exposure_h }}h</div>
-        <div class="label">Belichtung</div>
+        <div class="label">{{ $t('target_detail.exposure') }}</div>
       </div>
       <div class="stat-card">
         <div class="value">{{ target.ra_deg != null ? formatCoord(target.ra_deg, 'RA') : '-' }}</div>
-        <div class="label">Rektaszension</div>
+        <div class="label">{{ $t('target_detail.right_ascension') }}</div>
       </div>
       <div class="stat-card">
         <div class="value">{{ target.dec_deg != null ? formatCoord(target.dec_deg, 'DEC') : '-' }}</div>
-        <div class="label">Deklination</div>
+        <div class="label">{{ $t('target_detail.declination') }}</div>
       </div>
     </div>
 
     <div class="card">
-      <h3>Letzte Aufnahmen</h3>
+      <h3>{{ $t('target_detail.recent_images') }}</h3>
       <div class="thumbnail-grid" v-if="thumbnails.length">
         <div v-for="t in thumbnails" :key="t.id" class="thumbnail-item">
           <img v-if="t.thumbnail" :src="t.thumbnail" :alt="t.filename" class="thumb-img" />
@@ -279,21 +275,21 @@ watch(mergeSearch, searchMergeTargets)
           <div class="thumb-meta">{{ t.filter_name || '-' }} · {{ t.exposure ? t.exposure + 's' : '-' }}</div>
         </div>
       </div>
-      <p v-else class="empty">Keine Vorschaubilder verfügbar.</p>
+      <p v-else class="empty">{{ $t('target_detail.no_thumbnails') }}</p>
     </div>
 
     <div class="card">
-      <h3>Sessions ({{ totalItems }})</h3>
+      <h3>{{ $t('target_detail.sessions_list', { count: totalItems }) }}</h3>
       <div class="table-responsive">
         <table class="data-table">
           <thead>
             <tr>
-              <th class="sortable" @click="toggleSort('date_obs')">Datum {{ sortIcon('date_obs') }}</th>
-              <th>Kamera</th>
-              <th>Teleskop</th>
-              <th class="sortable" @click="toggleSort('total_exposure_h')">Belichtung {{ sortIcon('total_exposure_h') }}</th>
-              <th class="sortable" @click="toggleSort('frame_count')">Frames {{ sortIcon('frame_count') }}</th>
-              <th>Status</th>
+              <th class="sortable" @click="toggleSort('date_obs')">{{ $t('target_detail.col_date') }} {{ sortIcon('date_obs') }}</th>
+              <th>{{ $t('target_detail.col_camera') }}</th>
+              <th>{{ $t('target_detail.col_telescope') }}</th>
+              <th class="sortable" @click="toggleSort('total_exposure_h')">{{ $t('target_detail.col_exposure') }} {{ sortIcon('total_exposure_h') }}</th>
+              <th class="sortable" @click="toggleSort('frame_count')">{{ $t('target_detail.col_frames') }} {{ sortIcon('frame_count') }}</th>
+              <th>{{ $t('target_detail.col_status') }}</th>
             </tr>
           </thead>
           <tbody>

@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useApiStore, type Camera, type Telescope } from '@/stores/api'
 import { useThemeStore } from '@/stores/theme'
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 const apiStore = useApiStore()
 const themeStore = useThemeStore()
 const settings = ref<Record<string, string>>({})
@@ -16,10 +18,10 @@ const resetBusy = ref(false)
 const cameras = ref<Camera[]>([])
 const telescopes = ref<Telescope[]>([])
 
-const SETTINGS_DEFINITIONS = [
-  { key: 'scan_paths', label: 'Scan-Verzeichnisse', description: 'Komma-getrennte Liste von Pfaden', type: 'text', placeholder: 'z.B. /mnt/data/Astro/astro,/home/user/astro' },
-  { key: 'astap_binary', label: 'ASTAP Binary Pfad', description: 'Pfad zur ASTAP ausführbaren Datei', type: 'text', placeholder: 'z.B. /usr/bin/astap' },
-]
+const settingsDefs = computed(() => [
+  { key: 'scan_paths', label: t('settings.setting_scan_paths'), description: t('settings.setting_scan_paths_desc'), type: 'text', placeholder: 'z.B. /mnt/data/Astro/astro,/home/user/astro' },
+  { key: 'astap_binary', label: t('settings.setting_astap_binary'), description: t('settings.setting_astap_binary_desc'), type: 'text', placeholder: 'z.B. /usr/bin/astap' },
+])
 
 async function load() {
   loading.value = true
@@ -31,7 +33,6 @@ async function load() {
     cameras.value = await apiStore.fetch<Camera[]>('/cameras')
     telescopes.value = await apiStore.fetch<Telescope[]>('/telescopes')
   } catch {
-    // Settings table may not exist yet
   } finally {
     loading.value = false
   }
@@ -39,14 +40,13 @@ async function load() {
 
 function buildPayload() {
   const payload: { key: string; value: string; description: string }[] = []
-  for (const def of SETTINGS_DEFINITIONS) {
+  for (const def of settingsDefs.value) {
     payload.push({ key: def.key, value: settings.value[def.key] || '', description: def.description })
   }
-  // Camera overrides
   for (const c of cameras.value) {
     const overrideVal = settings.value[`camera_${c.id}_shortname`]
     if (overrideVal && overrideVal !== (c.short_name || '')) {
-      payload.push({ key: `camera_${c.id}_shortname`, value: overrideVal, description: `Override für ${c.name}` })
+      payload.push({ key: `camera_${c.id}_shortname`, value: overrideVal, description: t('settings.override_cameras_title') + ': ' + c.name })
     }
   }
   return payload
@@ -60,7 +60,7 @@ async function save() {
     saved.value = true
     setTimeout(() => { saved.value = false }, 2000)
   } catch (e: any) {
-    alert('Fehler beim Speichern: ' + (e.message || 'Unbekannter Fehler'))
+    alert(t('error.generic', { message: e.message || t('error.generic', { message: 'Unbekannter Fehler' }) }))
   } finally {
     saving.value = false
   }
@@ -71,10 +71,10 @@ async function resetDb() {
   try {
     await apiStore.post('/db/reset', { confirm: true })
     confirmingReset.value = false
-    alert('Datenbank zurückgesetzt. Alle Daten wurden gelöscht.')
+    alert(t('settings.danger_reset_title') + ' — ' + t('settings.danger_reset_desc'))
     window.location.reload()
   } catch (e: any) {
-    alert('Fehler: ' + (e.response?.data?.detail || e.message))
+    alert(t('error.generic', { message: e.response?.data?.detail || e.message }))
   } finally {
     resetBusy.value = false
   }
@@ -86,48 +86,46 @@ onMounted(load)
 <template>
   <div>
     <div class="page-header">
-      <h2>Einstellungen</h2>
-      <p>Konfiguriere Pfade, Equipment und Verhalten</p>
+      <h2>{{ $t('settings.title') }}</h2>
+      <p>{{ $t('settings.description') }}</p>
     </div>
 
-    <div v-if="loading" class="loading">Lade Einstellungen...</div>
+    <div v-if="loading" class="loading">{{ $t('settings.loading') }}</div>
 
     <template v-else>
       <div class="tabs">
-        <button :class="['tab', { active: activeTab === 'general' }]" @click="activeTab = 'general'">Allgemein</button>
-        <button :class="['tab', { active: activeTab === 'equipment' }]" @click="activeTab = 'equipment'">Equipment-Namen</button>
-        <button :class="['tab', 'tab-danger', { active: activeTab === 'danger' }]" @click="activeTab = 'danger'">Gefahrenzone</button>
+        <button :class="['tab', { active: activeTab === 'general' }]" @click="activeTab = 'general'">{{ $t('settings.tab_general') }}</button>
+        <button :class="['tab', { active: activeTab === 'equipment' }]" @click="activeTab = 'equipment'">{{ $t('settings.tab_equipment') }}</button>
+        <button :class="['tab', 'tab-danger', { active: activeTab === 'danger' }]" @click="activeTab = 'danger'">{{ $t('settings.tab_danger') }}</button>
       </div>
 
-      <!-- General Settings -->
       <div v-if="activeTab === 'general'" class="card">
         <div class="settings-list">
-          <div v-for="def in SETTINGS_DEFINITIONS" :key="def.key" class="setting-item">
+          <div v-for="def in settingsDefs" :key="def.key" class="setting-item">
             <label :for="def.key">{{ def.label }}</label>
             <p class="setting-desc">{{ def.description }}</p>
             <input :id="def.key" v-model="settings[def.key]" type="text" class="setting-input" :placeholder="def.placeholder || ''" />
           </div>
           <div class="setting-item">
-            <label>Theme</label>
-            <p class="setting-desc">Dark / Light / System (wird lokal gespeichert)</p>
+            <label>{{ $t('settings.setting_theme') }}</label>
+            <p class="setting-desc">{{ $t('settings.setting_theme_desc') }}</p>
             <select class="setting-input" :value="themeStore.theme" @change="themeStore.setTheme(($event.target as HTMLSelectElement).value as any)">
-              <option value="dark">Dark</option>
-              <option value="light">Light</option>
+              <option value="dark">{{ $t('nav.theme_dark') }}</option>
+              <option value="light">{{ $t('nav.theme_light') }}</option>
               <option value="system">System</option>
             </select>
           </div>
         </div>
       </div>
 
-      <!-- Equipment Overrides -->
       <div v-if="activeTab === 'equipment'" class="card">
-        <h3>Kamera-Namen überschreiben</h3>
+        <h3>{{ $t('settings.override_cameras_title') }}</h3>
         <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">
-          Ändere die angezeigten Namen deiner Kameras (z.B. "ZWO ASI294MM Pro" → "ASI294MM")
+          {{ $t('settings.override_cameras_desc') }}
         </p>
         <div class="table-responsive" v-if="cameras.length">
           <table class="data-table">
-            <thead><tr><th>Original-Name</th><th>Angezeigter Name</th></tr></thead>
+            <thead><tr><th>{{ $t('settings.col_original') }}</th><th>{{ $t('settings.col_display') }}</th></tr></thead>
             <tbody>
               <tr v-for="c in cameras" :key="c.id">
                 <td style="font-size: 12px; color: var(--text-muted);">{{ c.name }}</td>
@@ -142,12 +140,12 @@ onMounted(load)
             </tbody>
           </table>
         </div>
-        <p v-else class="empty">Keine Kameras gefunden.</p>
+        <p v-else class="empty">{{ $t('settings.override_cameras_none') }}</p>
 
-        <h3 style="margin-top: 24px;">Teleskop-Namen überschreiben</h3>
+        <h3 style="margin-top: 24px;">{{ $t('settings.override_telescopes_title') }}</h3>
         <div class="table-responsive" v-if="telescopes.length">
           <table class="data-table">
-            <thead><tr><th>Original-Name</th><th>Angezeigter Name</th></tr></thead>
+            <thead><tr><th>{{ $t('settings.col_original') }}</th><th>{{ $t('settings.col_display') }}</th></tr></thead>
             <tbody>
               <tr v-for="t in telescopes" :key="t.id">
                 <td style="font-size: 12px; color: var(--text-muted);">{{ t.name }}</td>
@@ -162,29 +160,27 @@ onMounted(load)
             </tbody>
           </table>
         </div>
-        <p v-else class="empty">Keine Teleskope gefunden.</p>
+        <p v-else class="empty">{{ $t('settings.override_telescopes_none') }}</p>
       </div>
 
-      <!-- Danger Zone -->
       <div v-if="activeTab === 'danger'" class="card danger-zone">
-        <h3 style="color: var(--danger);">Datenbank zurücksetzen</h3>
+        <h3 style="color: var(--danger);">{{ $t('settings.danger_reset_title') }}</h3>
         <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">
-          Löscht alle Targets, Sessions, Frames, Equipment und Einstellungen.
-          Die Datenbank wird danach neu initialisiert. Diese Aktion kann nicht rückgängig gemacht werden.
+          {{ $t('settings.danger_reset_desc') }}
         </p>
         <div v-if="!confirmingReset">
           <button class="btn btn-danger" @click="confirmingReset = true">
-            Datenbank zurücksetzen
+            {{ $t('settings.danger_reset_button') }}
           </button>
         </div>
         <div v-else class="reset-confirm">
-          <p style="margin-bottom: 12px;"><strong>Wirklich alle Daten löschen?</strong></p>
+          <p style="margin-bottom: 12px;"><strong>{{ $t('settings.danger_reset_confirm') }}</strong></p>
           <div class="reset-actions">
             <button class="btn btn-danger" @click="resetDb" :disabled="resetBusy">
-              {{ resetBusy ? 'Lösche...' : 'Ja, alles löschen' }}
+              {{ resetBusy ? $t('settings.danger_reset_busy') : $t('settings.danger_reset_yes') }}
             </button>
             <button class="btn btn-ghost" @click="confirmingReset = false" :disabled="resetBusy">
-              Abbrechen
+              {{ $t('settings.danger_reset_cancel') }}
             </button>
           </div>
         </div>
@@ -192,9 +188,9 @@ onMounted(load)
 
       <div class="setting-actions">
         <button class="btn" @click="save" :disabled="saving">
-          {{ saving ? 'Speichern...' : 'Speichern' }}
+          {{ saving ? $t('settings.save_busy') : $t('settings.save') }}
         </button>
-        <span v-if="saved" class="save-success">✓ Gespeichert</span>
+        <span v-if="saved" class="save-success">{{ $t('settings.save_success') }}</span>
       </div>
     </template>
   </div>

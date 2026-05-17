@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { useApiStore } from './api'
+import { i18n } from '@/i18n'
 
 export interface AnalyseState {
   running: boolean
@@ -35,10 +36,10 @@ export const useAnalyseStore = defineStore('analyse', () => {
 
   const phaseLabel = computed(() => {
     switch (state.value.phase) {
-      case 'analysing': return 'Analysiere...'
-      case 'done': return 'Analyse abgeschlossen'
-      case 'cancelled': return 'Analyse abgebrochen'
-      case 'error': return 'Fehler bei der Analyse'
+      case 'analysing': return i18n.global.t('phase.analysing')
+      case 'done': return i18n.global.t('phase.analyse_done')
+      case 'cancelled': return i18n.global.t('phase.analyse_cancelled')
+      case 'error': return i18n.global.t('phase.analyse_error')
       default: return ''
     }
   })

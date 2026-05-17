@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { useApiStore } from './api'
+import { i18n } from '@/i18n'
 
 export interface PlatesolveState {
   running: boolean
@@ -35,10 +36,10 @@ export const usePlatesolveStore = defineStore('platesolve', () => {
 
   const phaseLabel = computed(() => {
     switch (state.value.phase) {
-      case 'solving': return 'Platesolving...'
-      case 'done': return 'Platesolving abgeschlossen'
-      case 'cancelled': return 'Platesolving abgebrochen'
-      case 'error': return 'Fehler beim Platesolving'
+      case 'solving': return i18n.global.t('phase.solving')
+      case 'done': return i18n.global.t('phase.solve_done')
+      case 'cancelled': return i18n.global.t('phase.solve_cancelled')
+      case 'error': return i18n.global.t('phase.solve_error')
       default: return ''
     }
   })

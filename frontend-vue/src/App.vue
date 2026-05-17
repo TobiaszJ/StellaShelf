@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
 import { useRouter, RouterView, RouterLink } from 'vue-router'
-import { Telescope, Target, Camera, ScanLine, Search, Settings as SettingsIcon, HelpCircle, Globe, Sun, Moon, Activity, LayoutDashboard, List, Crosshair, Menu, X } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
+import { Telescope, Target, Camera, ScanLine, Search, Settings as SettingsIcon, HelpCircle, Globe, Sun, Moon, Activity, LayoutDashboard, List, Crosshair, Menu, X, Languages } from 'lucide-vue-next'
 import { useScanStore } from '@/stores/scan'
 import { usePlatesolveStore } from '@/stores/platesolve'
 import { useAnalyseStore } from '@/stores/analyse'
 import { useIdentifyStore } from '@/stores/identify'
 import { useThemeStore } from '@/stores/theme'
 import { useApiStore } from '@/stores/api'
+import { i18n, setLocale } from '@/i18n'
 
 const scanStore = useScanStore()
 const platesolveStore = usePlatesolveStore()
@@ -16,9 +18,17 @@ const identifyStore = useIdentifyStore()
 const themeStore = useThemeStore()
 const apiStore = useApiStore()
 
+const { t } = useI18n()
 const router = useRouter()
 const sidebarOpen = ref(false)
+const currentLocale = ref(i18n.global.locale.value)
 const buildInfo = ref('')
+
+function switchLocale() {
+  const next = currentLocale.value === 'de' ? 'en' : 'de'
+  setLocale(next)
+  currentLocale.value = next
+}
 
 async function loadBuildInfo() {
   try {
@@ -88,60 +98,64 @@ function toggleTheme() {
             <X :size="18" />
           </button>
         </div>
-        <div class="version">v0.4.0</div>
+        <div class="version">{{ t('nav.version') }}</div>
         <div class="build" v-if="buildInfo">{{ buildInfo }}</div>
       </div>
       <nav class="sidebar-nav">
         <RouterLink to="/" class="nav-item" @click="closeSidebar">
           <LayoutDashboard :size="18" />
-          <span class="nav-label">Dashboard</span>
+          <span class="nav-label">{{ t('nav.dashboard') }}</span>
         </RouterLink>
         <RouterLink to="/targets" class="nav-item" @click="closeSidebar">
           <Target :size="18" />
-          <span class="nav-label">Objekte</span>
+          <span class="nav-label">{{ t('nav.targets') }}</span>
         </RouterLink>
         <RouterLink to="/sessions" class="nav-item" @click="closeSidebar">
           <List :size="18" />
-          <span class="nav-label">Sessions</span>
+          <span class="nav-label">{{ t('nav.sessions') }}</span>
         </RouterLink>
         <RouterLink to="/equipment" class="nav-item" @click="closeSidebar">
           <Camera :size="18" />
-          <span class="nav-label">Ausrüstung</span>
+          <span class="nav-label">{{ t('nav.equipment') }}</span>
         </RouterLink>
         <RouterLink to="/search" class="nav-item" @click="closeSidebar">
           <Search :size="18" />
-          <span class="nav-label">Suche</span>
+          <span class="nav-label">{{ t('nav.search') }}</span>
         </RouterLink>
         <RouterLink to="/scan" class="nav-item" @click="closeSidebar">
           <ScanLine :size="18" />
-          <span class="nav-label">Scan</span>
+          <span class="nav-label">{{ t('nav.scan') }}</span>
         </RouterLink>
         <RouterLink to="/settings" class="nav-item" @click="closeSidebar">
           <SettingsIcon :size="18" />
-          <span class="nav-label">Einstellungen</span>
+          <span class="nav-label">{{ t('nav.settings') }}</span>
         </RouterLink>
         <RouterLink to="/platesolve" class="nav-item" @click="closeSidebar">
           <Globe :size="18" />
-          <span class="nav-label">Platesolving</span>
+          <span class="nav-label">{{ t('nav.platesolve') }}</span>
         </RouterLink>
         <RouterLink to="/analyse" class="nav-item" @click="closeSidebar">
           <Activity :size="18" />
-          <span class="nav-label">Analyse</span>
+          <span class="nav-label">{{ t('nav.analyse') }}</span>
         </RouterLink>
         <RouterLink to="/identify" class="nav-item" @click="closeSidebar">
           <Crosshair :size="18" />
-          <span class="nav-label">Identifizieren</span>
+          <span class="nav-label">{{ t('nav.identify') }}</span>
         </RouterLink>
         <RouterLink to="/help" class="nav-item" @click="closeSidebar">
           <HelpCircle :size="18" />
-          <span class="nav-label">Hilfe</span>
+          <span class="nav-label">{{ t('nav.help') }}</span>
         </RouterLink>
       </nav>
       <div class="sidebar-footer">
         <button class="nav-item" @click="toggleTheme">
           <Sun v-if="!themeStore.isDark" :size="18" />
           <Moon v-else :size="18" />
-          <span class="nav-label">{{ themeStore.isDark ? 'Dark Mode' : 'Light Mode' }}</span>
+          <span class="nav-label">{{ themeStore.isDark ? t('nav.theme_dark') : t('nav.theme_light') }}</span>
+        </button>
+        <button class="nav-item" @click="switchLocale" style="width:100%;border:none;background:none;">
+          <Languages :size="18" />
+          <span class="nav-label">{{ currentLocale === 'de' ? 'English' : 'Deutsch' }}</span>
         </button>
       </div>
     </aside>
@@ -152,7 +166,7 @@ function toggleTheme() {
         <button class="hamburger" @click="sidebarOpen = !sidebarOpen" aria-label="Menü öffnen">
           <Menu :size="22" />
         </button>
-        <span class="top-bar-title">StellaShelf</span>
+        <span class="top-bar-title">{{ t('topbar.title') }}</span>
       </div>
 
       <!-- Scan Banner -->

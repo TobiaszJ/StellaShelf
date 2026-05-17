@@ -2,10 +2,12 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useApiStore, type DashboardData } from '@/stores/api'
+import { useI18n } from 'vue-i18n'
 import StatCard from '@/components/StatCard.vue'
 import VChart from 'vue-echarts'
 import 'echarts'
 
+const { t } = useI18n()
 const apiStore = useApiStore()
 const router = useRouter()
 const dashboard = ref<DashboardData | null>(null)
@@ -18,7 +20,7 @@ async function load() {
   try {
     dashboard.value = await apiStore.fetch<DashboardData>('/dashboard')
   } catch (e: any) {
-    error.value = e.message || 'Fehler beim Laden des Dashboards'
+    error.value = e.message || t('error.generic', { message: 'Dashboard laden fehlgeschlagen' })
   } finally {
     loading.value = false
   }
@@ -45,7 +47,7 @@ const chartOption = computed(() => {
     },
     yAxis: {
       type: 'value' as const,
-      name: 'Stunden',
+      name: t('dashboard.hours'),
       nameTextStyle: { color: textColor, fontSize: 11 },
       axisLabel: { color: textColor, fontSize: 11 },
       splitLine: { lineStyle: { color: splitColor } },
@@ -63,12 +65,12 @@ const chartOption = computed(() => {
 <template>
   <div>
     <div class="page-header">
-      <h2>Dashboard</h2>
-      <p>Übersicht deiner Astrofoto-Sammlung</p>
+      <h2>{{ $t('dashboard.title') }}</h2>
+      <p>{{ $t('dashboard.description') }}</p>
     </div>
 
     <!-- Loading state -->
-    <div v-if="loading" class="loading">Lade Dashboard...</div>
+    <div v-if="loading" class="loading">{{ $t('dashboard.loading') }}</div>
 
     <!-- Error state -->
     <div v-else-if="error" class="empty" style="color: var(--danger)">
@@ -77,14 +79,14 @@ const chartOption = computed(() => {
 
     <template v-else-if="dashboard">
       <div class="stats-grid">
-        <StatCard :value="dashboard.total_targets" label="Targets" />
-        <StatCard :value="dashboard.total_sessions" label="Sessions" />
-        <StatCard :value="dashboard.total_frames?.toLocaleString()" label="Frames" />
-        <StatCard :value="dashboard.total_exposure_h + 'h'" label="Belichtung" />
+        <StatCard :value="dashboard.total_targets" :label="$t('dashboard.targets')" />
+        <StatCard :value="dashboard.total_sessions" :label="$t('dashboard.sessions')" />
+        <StatCard :value="dashboard.total_frames?.toLocaleString()" :label="$t('dashboard.frames')" />
+        <StatCard :value="dashboard.total_exposure_h + 'h'" :label="$t('dashboard.exposure')" />
       </div>
 
       <div class="card">
-        <h3>Top Targets (nach Belichtungszeit)</h3>
+        <h3>{{ $t('dashboard.top_targets') }}</h3>
         <div class="target-grid">
           <div
             v-for="t in topTargets"
@@ -93,16 +95,16 @@ const chartOption = computed(() => {
             @click="router.push({ name: 'target-detail', params: { id: t.id } })"
           >
             <div class="name">{{ t.name }}</div>
-            <div class="meta">{{ t.total_exposure_h }}h · {{ t.session_count }} Sessions</div>
+            <div class="meta">{{ t.total_exposure_h }}h · {{ t.session_count }} {{ $t('dashboard.sessions') }}</div>
           </div>
         </div>
       </div>
 
       <div class="card">
-        <h3>Kameras</h3>
+        <h3>{{ $t('dashboard.cameras') }}</h3>
         <div class="table-responsive">
           <table class="data-table">
-            <thead><tr><th>Name</th><th>Frames</th><th>Belichtung</th></tr></thead>
+            <thead><tr><th>{{ $t('dashboard.col_name') }}</th><th>{{ $t('dashboard.col_frames') }}</th><th>{{ $t('dashboard.col_exposure') }}</th></tr></thead>
             <tbody>
               <tr v-for="c in cameras" :key="c.id">
                 <td><strong>{{ c.short_name || c.name }}</strong></td>
@@ -115,22 +117,22 @@ const chartOption = computed(() => {
       </div>
 
       <div class="card" v-if="topTargets.length">
-        <h3>Belichtung pro Target (Top 5)</h3>
+        <h3>{{ $t('dashboard.exposure_per_target') }}</h3>
         <div class="chart-container">
           <VChart :option="chartOption" autoresize />
         </div>
       </div>
 
       <div class="card">
-        <h3>Letzte Sessions</h3>
+        <h3>{{ $t('dashboard.recent_sessions') }}</h3>
         <div class="table-responsive">
           <table class="data-table">
             <thead>
               <tr>
-                <th>Ziel</th>
-                <th>Datum</th>
-                <th>Belichtung</th>
-                <th>Frames</th>
+                <th>{{ $t('dashboard.col_target') }}</th>
+                <th>{{ $t('dashboard.col_date') }}</th>
+                <th>{{ $t('dashboard.col_exposure') }}</th>
+                <th>{{ $t('dashboard.col_frames') }}</th>
               </tr>
             </thead>
             <tbody>

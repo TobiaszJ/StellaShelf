@@ -2,8 +2,10 @@
 import { ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useApiStore, type Session, type PaginatedResponse } from '@/stores/api'
+import { useI18n } from 'vue-i18n'
 import Pagination from '@/components/Pagination.vue'
 
+const { t } = useI18n()
 const apiStore = useApiStore()
 const router = useRouter()
 const route = useRoute()
@@ -67,27 +69,27 @@ watch([page, statusFilter, filterName, sortBy, sortOrder], load, { immediate: tr
 <template>
   <div>
     <div class="page-header">
-      <h2>Sessions</h2>
-      <p>{{ totalItems }} Beobachtungs-Sessions</p>
-      <span v-if="filterName" class="filter-badge">Filter: {{ filterName }}</span>
+      <h2>{{ $t('sessions.title') }}</h2>
+      <p>{{ $t('sessions.description', { count: totalItems }) }}</p>
+      <span v-if="filterName" class="filter-badge">{{ $t('sessions.filter_badge', { name: filterName }) }}</span>
     </div>
 
     <div class="filters">
       <div class="filter-group">
-        <label>Status</label>
+        <label>{{ $t('sessions.filter_status') }}</label>
         <select v-model="statusFilter">
-          <option value="">Alle</option>
-          <option value="raw">Raw</option>
-          <option value="calibrated">Kalibriert</option>
-          <option value="stacked">Gestackt</option>
+          <option value="">{{ $t('sessions.filter_all') }}</option>
+          <option value="raw">{{ $t('sessions.status_raw') }}</option>
+          <option value="calibrated">{{ $t('sessions.status_calibrated') }}</option>
+          <option value="stacked">{{ $t('sessions.status_stacked') }}</option>
         </select>
       </div>
       <div class="filter-group">
-        <label>Sortierung</label>
+        <label>{{ $t('sessions.filter_sort') }}</label>
         <select v-model="sortBy">
-          <option value="date_obs">Datum</option>
-          <option value="total_exposure_h">Belichtung</option>
-          <option value="frame_count">Frames</option>
+          <option value="date_obs">{{ $t('sessions.col_date') }}</option>
+          <option value="total_exposure_h">{{ $t('sessions.col_exposure') }}</option>
+          <option value="frame_count">{{ $t('sessions.col_frames') }}</option>
         </select>
       </div>
     </div>
@@ -96,14 +98,14 @@ watch([page, statusFilter, filterName, sortBy, sortOrder], load, { immediate: tr
       <table class="data-table">
         <thead>
           <tr>
-            <th>Ziel</th>
-            <th class="sortable" @click="toggleSort('date_obs')">Datum {{ sortIcon('date_obs') }}</th>
-            <th>Kamera</th>
-            <th>Teleskop</th>
-            <th class="sortable" @click="toggleSort('total_exposure_h')">Belichtung {{ sortIcon('total_exposure_h') }}</th>
-            <th>Ordner</th>
-            <th class="sortable" @click="toggleSort('frame_count')">Frames {{ sortIcon('frame_count') }}</th>
-            <th>Status</th>
+            <th>{{ $t('sessions.col_target') }}</th>
+            <th class="sortable" @click="toggleSort('date_obs')">{{ $t('sessions.col_date') }} {{ sortIcon('date_obs') }}</th>
+            <th>{{ $t('sessions.col_camera') }}</th>
+            <th>{{ $t('sessions.col_telescope') }}</th>
+            <th class="sortable" @click="toggleSort('total_exposure_h')">{{ $t('sessions.col_exposure') }} {{ sortIcon('total_exposure_h') }}</th>
+            <th>{{ $t('sessions.col_folder') }}</th>
+            <th class="sortable" @click="toggleSort('frame_count')">{{ $t('sessions.col_frames') }} {{ sortIcon('frame_count') }}</th>
+            <th>{{ $t('sessions.col_status') }}</th>
           </tr>
         </thead>
         <tbody>

@@ -2,8 +2,10 @@
 import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useApiStore, type Target, type PaginatedResponse, type DuplicateGroup } from '@/stores/api'
+import { useI18n } from 'vue-i18n'
 import Pagination from '@/components/Pagination.vue'
 
+const { t } = useI18n()
 const apiStore = useApiStore()
 const router = useRouter()
 const targets = ref<Target[]>([])
@@ -64,7 +66,7 @@ async function mergeGroup(canonicalName: string) {
     if (duplicates.value.length === 0) showDuplicates.value = false
     load()
   } catch (e: any) {
-    alert('Fehler beim Zusammenführen: ' + (e.response?.data?.detail || e.message))
+    alert(t('error.generic', { message: e.response?.data?.detail || e.message }))
   } finally {
     merging.value.delete(canonicalName)
   }
@@ -98,13 +100,13 @@ function toggleSortOrder() {
 <template>
   <div>
     <div class="page-header">
-      <h2>Targets</h2>
-      <p>{{ totalItems }} astronomische Objekte</p>
+      <h2>{{ $t('targets.title') }}</h2>
+      <p>{{ $t('targets.description', { count: totalItems }) }}</p>
     </div>
 
     <div v-if="showDuplicates && duplicates.length" class="duplicate-banner">
-      <span>{{ duplicates.length }} mögliche Duplikat-Gruppe(n) gefunden.</span>
-      <button class="btn btn-sm" @click="showDuplicates = false">Ausblenden</button>
+      <span>{{ $t('targets.duplicates_found', { count: duplicates.length }) }}</span>
+      <button class="btn btn-sm" @click="showDuplicates = false">{{ $t('targets.hide') }}</button>
     </div>
 
     <div v-if="showDuplicates" class="duplicate-list">
@@ -116,48 +118,48 @@ function toggleSortOrder() {
             @click="mergeGroup(group.canonical_name)"
             :disabled="merging.has(group.canonical_name)"
           >
-            {{ merging.has(group.canonical_name) ? 'Führe zusammen...' : 'Alle zusammenführen' }}
+            {{ merging.has(group.canonical_name) ? $t('targets.merging') : $t('targets.merge_all') }}
           </button>
         </div>
         <div v-for="t in group.targets" :key="t.id" class="duplicate-target">
-          <span>{{ t.name }} ({{ t.session_count }} Sessions)</span>
-          <button class="btn btn-sm" @click="viewTarget(t.id)">Öffnen</button>
+          <span>{{ t.name }} ({{ t.session_count }} {{ $t('targets.col_sessions') }})</span>
+          <button class="btn btn-sm" @click="viewTarget(t.id)">{{ $t('targets.open') }}</button>
         </div>
       </div>
     </div>
 
     <div class="filters">
       <div class="filter-group">
-        <label>Suche</label>
-        <input v-model="search" placeholder="Name..." type="text" />
+        <label>{{ $t('targets.filter_search') }}</label>
+        <input v-model="search" :placeholder="$t('targets.filter_search_placeholder')" type="text" />
       </div>
       <div class="filter-group">
-        <label>Typ</label>
+        <label>{{ $t('targets.filter_type') }}</label>
         <select v-model="selectedType">
-          <option value="">Alle</option>
+          <option value="">{{ $t('targets.filter_all') }}</option>
           <option v-for="t in objectTypes" :key="t" :value="t">{{ t }}</option>
         </select>
       </div>
       <div class="filter-group">
-        <label>Sternbild</label>
+        <label>{{ $t('targets.filter_constellation') }}</label>
         <select v-model="selectedConstellation">
-          <option value="">Alle</option>
+          <option value="">{{ $t('targets.filter_all') }}</option>
           <option v-for="c in constellations" :key="c" :value="c">{{ c }}</option>
         </select>
       </div>
       <div class="filter-group">
-        <label>Sortierung</label>
+        <label>{{ $t('targets.filter_sort') }}</label>
         <select v-model="sortBy">
-          <option value="name">Name</option>
-          <option value="total_h">Belichtungszeit</option>
-          <option value="session_count">Sessions</option>
-          <option value="object_type">Typ</option>
+          <option value="name">{{ $t('targets.col_name') }}</option>
+          <option value="total_h">{{ $t('targets.col_exposure') }}</option>
+          <option value="session_count">{{ $t('targets.col_sessions') }}</option>
+          <option value="object_type">{{ $t('targets.col_type') }}</option>
         </select>
       </div>
       <div class="filter-group">
-        <label>Richtung</label>
+        <label>{{ $t('targets.filter_direction') }}</label>
         <button class="btn btn-sm" @click="toggleSortOrder">
-          {{ sortOrder === 'asc' ? '↑ Aufsteigend' : '↓ Absteigend' }}
+          {{ sortOrder === 'asc' ? $t('targets.sort_asc') : $t('targets.sort_desc') }}
         </button>
       </div>
     </div>
@@ -166,11 +168,11 @@ function toggleSortOrder() {
       <table class="data-table">
         <thead>
           <tr>
-            <th class="sortable" @click="sortBy = 'name'; sortOrder = sortOrder === 'asc' && sortBy === 'name' ? 'desc' : 'asc'">Name {{ sortBy === 'name' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</th>
-            <th class="sortable" @click="sortBy = 'session_count'; sortOrder = sortOrder === 'asc' && sortBy === 'session_count' ? 'desc' : 'asc'">Sessions {{ sortBy === 'session_count' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</th>
-            <th class="sortable" @click="sortBy = 'total_h'; sortOrder = sortOrder === 'asc' && sortBy === 'total_h' ? 'desc' : 'asc'">Belichtung {{ sortBy === 'total_h' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</th>
-            <th class="sortable" @click="sortBy = 'object_type'; sortOrder = sortOrder === 'asc' && sortBy === 'object_type' ? 'desc' : 'asc'">Typ {{ sortBy === 'object_type' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</th>
-            <th class="sortable" @click="sortBy = 'constellation'; sortOrder = sortOrder === 'asc' && sortBy === 'constellation' ? 'desc' : 'asc'">Sternbild {{ sortBy === 'constellation' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</th>
+            <th class="sortable" @click="sortBy = 'name'; sortOrder = sortOrder === 'asc' && sortBy === 'name' ? 'desc' : 'asc'">{{ $t('targets.col_name') }} {{ sortBy === 'name' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</th>
+            <th class="sortable" @click="sortBy = 'session_count'; sortOrder = sortOrder === 'asc' && sortBy === 'session_count' ? 'desc' : 'asc'">{{ $t('targets.col_sessions') }} {{ sortBy === 'session_count' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</th>
+            <th class="sortable" @click="sortBy = 'total_h'; sortOrder = sortOrder === 'asc' && sortBy === 'total_h' ? 'desc' : 'asc'">{{ $t('targets.col_exposure') }} {{ sortBy === 'total_h' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</th>
+            <th class="sortable" @click="sortBy = 'object_type'; sortOrder = sortOrder === 'asc' && sortBy === 'object_type' ? 'desc' : 'asc'">{{ $t('targets.col_type') }} {{ sortBy === 'object_type' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</th>
+            <th class="sortable" @click="sortBy = 'constellation'; sortOrder = sortOrder === 'asc' && sortBy === 'constellation' ? 'desc' : 'asc'">{{ $t('targets.col_constellation') }} {{ sortBy === 'constellation' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</th>
           </tr>
         </thead>
         <tbody>

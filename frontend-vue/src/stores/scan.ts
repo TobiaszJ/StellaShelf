@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { useApiStore } from './api'
 import type { ScanState } from './api'
+import { i18n } from '@/i18n'
 
 export const useScanStore = defineStore('scan', () => {
   const apiStore = useApiStore()
@@ -25,10 +26,10 @@ export const useScanStore = defineStore('scan', () => {
 
   const phaseLabel = computed(() => {
     switch (state.value.phase) {
-      case 'scanning': return 'Scanne und importiere...'
-      case 'done': return 'Scan abgeschlossen'
-      case 'cancelled': return 'Scan abgebrochen'
-      case 'error': return 'Fehler beim Scan'
+      case 'scanning': return i18n.global.t('phase.scanning')
+      case 'done': return i18n.global.t('phase.scan_done')
+      case 'cancelled': return i18n.global.t('phase.scan_cancelled')
+      case 'error': return i18n.global.t('phase.scan_error')
       default: return ''
     }
   })

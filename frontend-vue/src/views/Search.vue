@@ -2,7 +2,9 @@
 import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useApiStore } from '@/stores/api'
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 const apiStore = useApiStore()
 const router = useRouter()
 const query = ref('')
@@ -29,45 +31,44 @@ watch(query, (val) => {
 <template>
   <div>
     <div class="page-header">
-      <h2>Suche</h2>
-      <p>Durchsuche alle Metadaten deiner Astro-Sammlung</p>
+      <h2>{{ $t('search.title') }}</h2>
+      <p>{{ $t('search.description') }}</p>
     </div>
 
     <div class="search-bar">
       <input
         v-model="query"
-        placeholder="Suchbegriff eingeben (z.B. M42, NGC7000, Ha)..."
+        :placeholder="$t('search.placeholder')"
         type="text"
         class="search-input"
         @keyup.enter="search"
       />
       <button class="btn" @click="search" :disabled="!query.trim()">
-        Suchen
+        {{ $t('search.button') }}
       </button>
     </div>
 
     <div v-if="results" class="search-results">
       <div class="tabs">
         <button :class="['tab', { active: activeTab === 'all' }]" @click="activeTab = 'all'">
-          Alle ({{ results.targets.length + results.sessions.length + results.frames.length }})
+          {{ $t('search.tab_all') }} ({{ results.targets.length + results.sessions.length + results.frames.length }})
         </button>
         <button :class="['tab', { active: activeTab === 'targets' }]" @click="activeTab = 'targets'">
-          Targets ({{ results.targets.length }})
+          {{ $t('search.tab_targets', { count: results.targets.length }) }}
         </button>
         <button :class="['tab', { active: activeTab === 'sessions' }]" @click="activeTab = 'sessions'">
-          Sessions ({{ results.sessions.length }})
+          {{ $t('search.tab_sessions', { count: results.sessions.length }) }}
         </button>
         <button :class="['tab', { active: activeTab === 'frames' }]" @click="activeTab = 'frames'">
-          Frames ({{ results.frames.length }})
+          {{ $t('search.tab_frames', { count: results.frames.length }) }}
         </button>
       </div>
 
-      <!-- Targets -->
       <div class="card" v-if="activeTab === 'all' || activeTab === 'targets'">
-        <h3>Targets</h3>
+        <h3>{{ $t('search.tab_targets', { count: results.targets.length }) }}</h3>
         <div class="table-responsive" v-if="results.targets.length">
           <table class="data-table">
-            <thead><tr><th>Name</th><th>Typ</th></tr></thead>
+            <thead><tr><th>{{ $t('search.col_name') }}</th><th>{{ $t('search.col_type') }}</th></tr></thead>
             <tbody>
               <tr v-for="t in results.targets" :key="t.id" class="clickable" @click="router.push({ name: 'target-detail', params: { id: t.id } })">
                 <td><strong>{{ t.name }}</strong></td>
@@ -76,15 +77,14 @@ watch(query, (val) => {
             </tbody>
           </table>
         </div>
-        <p v-else class="empty">Keine Targets gefunden.</p>
+        <p v-else class="empty">{{ $t('search.empty_targets') }}</p>
       </div>
 
-      <!-- Sessions -->
       <div class="card" v-if="activeTab === 'all' || activeTab === 'sessions'">
-        <h3>Sessions</h3>
+        <h3>{{ $t('search.tab_sessions', { count: results.sessions.length }) }}</h3>
         <div class="table-responsive" v-if="results.sessions.length">
           <table class="data-table">
-            <thead><tr><th>Session</th><th>Datum</th><th>Frames</th></tr></thead>
+            <thead><tr><th>{{ $t('search.col_session') }}</th><th>{{ $t('search.col_date') }}</th><th>{{ $t('search.col_frames') }}</th></tr></thead>
             <tbody>
               <tr v-for="s in results.sessions" :key="s.id" class="clickable" @click="router.push({ name: 'session-detail', params: { id: s.id } })">
                 <td><strong>{{ s.group_key }}</strong></td>
@@ -94,15 +94,14 @@ watch(query, (val) => {
             </tbody>
           </table>
         </div>
-        <p v-else class="empty">Keine Sessions gefunden.</p>
+        <p v-else class="empty">{{ $t('search.empty_sessions') }}</p>
       </div>
 
-      <!-- Frames -->
       <div class="card" v-if="activeTab === 'all' || activeTab === 'frames'">
-        <h3>Frames</h3>
+        <h3>{{ $t('search.tab_frames', { count: results.frames.length }) }}</h3>
         <div class="table-responsive" v-if="results.frames.length">
           <table class="data-table">
-            <thead><tr><th>Datei</th><th>Target</th><th>Typ</th></tr></thead>
+            <thead><tr><th>{{ $t('search.col_file') }}</th><th>{{ $t('search.col_target_name') }}</th><th>{{ $t('search.col_type') }}</th></tr></thead>
             <tbody>
               <tr v-for="f in results.frames" :key="f.id">
                 <td style="font-family: monospace; font-size: 12px;">{{ f.filename }}</td>
@@ -112,12 +111,12 @@ watch(query, (val) => {
             </tbody>
           </table>
         </div>
-        <p v-else class="empty">Keine Frames gefunden.</p>
+        <p v-else class="empty">{{ $t('search.empty_frames') }}</p>
       </div>
     </div>
 
-    <p v-else-if="query && !results" class="loading">Suche läuft...</p>
-    <p v-else class="empty">Gib einen Suchbegriff ein, um zu beginnen.</p>
+    <p v-else-if="query && !results" class="loading">{{ $t('search.searching') }}</p>
+    <p v-else class="empty">{{ $t('search.start_hint') }}</p>
   </div>
 </template>
 

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { useApiStore } from './api'
+import { i18n } from '@/i18n'
 
 export interface IdentifyState {
   running: boolean
@@ -35,10 +36,10 @@ export const useIdentifyStore = defineStore('identify', () => {
 
   const phaseLabel = computed(() => {
     switch (state.value.phase) {
-      case 'identifying': return 'Identifiziere...'
-      case 'done': return 'Identifikation abgeschlossen'
-      case 'cancelled': return 'Identifikation abgebrochen'
-      case 'error': return 'Fehler bei der Identifikation'
+      case 'identifying': return i18n.global.t('phase.identifying')
+      case 'done': return i18n.global.t('phase.identify_done')
+      case 'cancelled': return i18n.global.t('phase.identify_cancelled')
+      case 'error': return i18n.global.t('phase.identify_error')
       default: return ''
     }
   })

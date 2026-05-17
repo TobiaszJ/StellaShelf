@@ -316,5 +316,13 @@ def init_db(db_path: Path | None = None) -> tuple:
         )
         conn.commit()
 
+    # Run pending schema migrations (gitignored db_migrations/versions/)
+    try:
+        from stellashelf.migrate import run_migrations
+
+        run_migrations(engine)
+    except Exception:
+        pass  # noop — migrations dir may not exist
+
     SessionLocal = sessionmaker(bind=engine)
     return engine, SessionLocal

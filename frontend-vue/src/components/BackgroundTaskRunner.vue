@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, useSlots } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   title: string
@@ -28,13 +31,13 @@ const phaseTitle = computed(() => {
     case 'analysing':
     case 'identifying':
     case 'scanning':
-      return 'In Bearbeitung...'
+      return t('task.in_progress')
     case 'done':
-      return 'Fertig'
+      return t('task.done')
     case 'cancelled':
-      return 'Abgebrochen'
+      return t('task.cancelled')
     case 'error':
-      return 'Fehler'
+      return t('task.error')
     default:
       return ''
   }
@@ -52,7 +55,7 @@ const showProgress = computed(() => props.running || props.phase !== 'idle')
 
     <div class="card">
       <p style="margin-bottom: 16px; color: var(--text-muted);">
-        Die Aufgabe läuft im Hintergrund — du kannst währenddessen weiterarbeiten.
+        {{ t('task.description') }}
       </p>
       <p v-if="extraDescription" style="margin-bottom: 16px; color: var(--text-muted);">
         {{ extraDescription }}
@@ -63,7 +66,7 @@ const showProgress = computed(() => props.running || props.phase !== 'idle')
           {{ running ? runningLabel : actionLabel }}
         </button>
         <button v-if="running" class="btn btn-danger" @click="onCancel">
-          Abbrechen
+          {{ t('task.cancel') }}
         </button>
       </div>
     </div>
@@ -76,24 +79,24 @@ const showProgress = computed(() => props.running || props.phase !== 'idle')
       <div class="stats-grid" style="margin-top: 12px;">
         <div class="stat-card">
           <div class="value">{{ total }}</div>
-          <div class="label">Total</div>
+          <div class="label">{{ t('task.total') }}</div>
         </div>
         <div class="stat-card">
           <div class="value" style="color: var(--accent2);">{{ doneCount }}</div>
-          <div class="label">Erfolgreich</div>
+          <div class="label">{{ t('task.successful') }}</div>
         </div>
         <div class="stat-card">
           <div class="value" style="color: var(--danger);">{{ failed }}</div>
-          <div class="label">Fehlgeschlagen</div>
+          <div class="label">{{ t('task.failed') }}</div>
         </div>
       </div>
       <p v-if="phase === 'done' || phase === 'cancelled'" style="margin-top: 12px; font-weight: 600;">
-        {{ phase === 'cancelled' ? 'Abgebrochen' : `${doneCount} erfolgreich, ${failed} fehlgeschlagen` }}
+        {{ phase === 'cancelled' ? t('task.cancelled') : `${doneCount} ${t('task.successful').toLowerCase()}, ${failed} ${t('task.failed').toLowerCase()}` }}
       </p>
     </div>
 
     <div v-if="log && log.length" class="card">
-      <h3>Log ({{ log.length }} Einträge)</h3>
+      <h3>{{ t('task.log_entries', { count: log.length }) }}</h3>
       <div class="log-container">
         <div v-for="(entry, i) in log" :key="i" class="log-entry" :class="'log-' + entry.status">
           <span class="log-status">{{ entry.status === 'solved' || entry.status === 'analysed' || entry.status === 'identified' ? '✓' : entry.status === 'failed' ? '✗' : entry.status === 'cancelled' ? '⬛' : '⚠' }}</span>

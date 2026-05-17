@@ -1,41 +1,34 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 </script>
 
 <template>
   <div>
     <div class="page-header">
-      <h2>Hilfe</h2>
-      <p>Dokumentation und Tipps zu StellaShelf</p>
+      <h2>{{ $t('help.title') }}</h2>
+      <p>{{ $t('help.description') }}</p>
     </div>
 
     <div class="card">
-      <h3>Über StellaShelf</h3>
-      <p style="color: var(--text-muted); line-height: 1.7;">
-        StellaShelf ist ein Open-Source-Tool zur Verwaltung und Katalogisierung von Astrofotografie-Bilddaten.
-        Es extrahiert Metadaten aus FITS-Dateien, gruppiert sie in Beobachtungssitzungen und stellt alles
-        über eine moderne Weboberfläche bereit.
-      </p>
+      <h3>{{ $t('help.about_title') }}</h3>
+      <p style="color: var(--text-muted); line-height: 1.7;" v-html="$t('help.about_text')"></p>
     </div>
 
     <div class="card">
-      <h3>Scanning</h3>
-      <p style="color: var(--text-muted); line-height: 1.7;">
-        Wähle ein Verzeichnis mit FITS-Dateien aus und starte den Scan. StellaShelf extrahiert automatisch
-        Metadaten (Zielobjekt, Kamera, Teleskop, Filter, Belichtungszeit etc.) aus den FITS-Headern.
-      </p>
+      <h3>{{ $t('help.scan_title') }}</h3>
+      <p style="color: var(--text-muted); line-height: 1.7;" v-html="$t('help.scan_text')"></p>
       <ul style="color: var(--text-muted); line-height: 2; margin-top: 8px; padding-left: 20px;">
-        <li><strong>.fit / .fits</strong> — Standard FITS-Dateien</li>
-        <li><strong>.fit.gz / .fits.gz</strong> — Gzip-komprimierte FITS (z.B. von SGP)</li>
-        <li><strong>.xisf</strong> — XISF-Dateien werden erkannt aber noch nicht vollständig geparst</li>
+        <li v-html="$t('help.scan_support_fits')"></li>
+        <li v-html="$t('help.scan_support_fits_gz')"></li>
+        <li v-html="$t('help.scan_support_xisf')"></li>
       </ul>
     </div>
 
     <div class="card">
-      <h3>Datenbank</h3>
-      <p style="color: var(--text-muted); line-height: 1.7;">
-        Die Datenbank wird standardmäßig unter <code>~/.stellashelf/stellashelf.db</code> gespeichert.
-        Du kannst den Pfad über die <RouterLink to="/settings">Einstellungen</RouterLink> ändern.
-      </p>
+      <h3>{{ $t('help.db_title') }}</h3>
+      <p style="color: var(--text-muted); line-height: 1.7;" v-html="$t('help.db_text')"></p>
     </div>
   </div>
 </template>

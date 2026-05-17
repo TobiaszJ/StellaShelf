@@ -2,13 +2,14 @@
 import { ref, computed, onMounted } from 'vue'
 import { useScanStore } from '@/stores/scan'
 import { useApiStore } from '@/stores/api'
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 const scanStore = useScanStore()
 const apiStore = useApiStore()
 const selectedPath = ref('')
 const knownPaths = ref<{ label: string; value: string }[]>([])
 
-// Cleanup state
 const cleanupTab = ref<'scan' | 'cleanup'>('scan')
 const cleanupPattern = ref('')
 const cleanupField = ref<'filename' | 'filepath'>('filename')
@@ -34,7 +35,6 @@ onMounted(async () => {
       }
     }
   } catch {
-    // Settings table may not exist yet
   }
   knownPaths.value = []
   selectedPath.value = ''
@@ -44,17 +44,16 @@ const btnDisabled = computed(() => scanStore.state.running)
 
 async function startScan() {
   if (!selectedPath.value.trim()) {
-    alert('Bitte einen Pfad eingeben')
+    alert(t('error.generic', { message: 'Bitte einen Pfad eingeben' }))
     return
   }
   try {
     await scanStore.startScan(selectedPath.value)
   } catch (e: any) {
-    alert(e.response?.data?.detail || 'Fehler beim Starten des Scans')
+    alert(e.response?.data?.detail || t('phase.scan_error'))
   }
 }
 
-// Cleanup functions
 async function searchFrames() {
   if (!cleanupPattern.value.trim()) return
   cleanupLoading.value = true
@@ -68,13 +67,12 @@ async function searchFrames() {
       sort_by: 'filename',
       sort_order: 'asc',
     }
-    // Send raw user input — backend handles * _ % escaping
     params[cleanupField.value] = cleanupPattern.value
     const res = await apiStore.fetch<any>('/frames', params)
     cleanupResults.value = res.items || []
     cleanupTotal.value = res.total || 0
   } catch (e: any) {
-    alert('Fehler bei der Suche: ' + (e.response?.data?.detail || e.message))
+    alert(t('error.generic', { message: e.response?.data?.detail || e.message }))
   } finally {
     cleanupLoading.value = false
   }
@@ -105,13 +103,13 @@ async function deleteSelected() {
   cleanupBusy.value = true
   try {
     const res = await apiStore.post<any>('/frames/delete', { frame_ids: ids })
-    alert(`${res.deleted} Frames gelöscht.`)
+    alert(t('scan.cleanup_found', { count: res.deleted }))
     cleanupConfirming.value = false
     cleanupResults.value = cleanupResults.value.filter((f: any) => !cleanupSelected.value.has(f.id))
     cleanupSelected.value = new Set()
     cleanupTotal.value -= res.deleted
   } catch (e: any) {
-    alert('Fehler: ' + (e.response?.data?.detail || e.message))
+    alert(t('error.generic', { message: e.response?.data?.detail || e.message }))
   } finally {
     cleanupBusy.value = false
   }
@@ -122,9 +120,11 @@ async function cleanupOrphans() {
   cleanupOrphanResult.value = null
   try {
     const res = await apiStore.post<any>('/db/cleanup-orphans', {})
-    cleanupOrphanResult.value = `${res.sessions} Sessions, ${res.targets} Targets, ${res.cameras} Kameras, ${res.telescopes} Teleskope entfernt`
+    cleanupOrphanResult.value = t('scan.cleanup_orphan_success', {
+      result: `${res.sessions} ${t('nav.sessions')}, ${res.targets} ${t('nav.targets')}, ${res.cameras} ${t('equipment.tab_cameras', { count: 0 }).split(' ')[0]}, ${res.telescopes} ${t('equipment.tab_telescopes', { count: 0 }).split(' ')[0]}`
+    })
   } catch (e: any) {
-    alert('Fehler: ' + (e.response?.data?.detail || e.message))
+    alert(t('error.generic', { message: e.response?.data?.detail || e.message }))
   } finally {
     cleanupOrphansBusy.value = false
   }
@@ -134,36 +134,35 @@ async function cleanupOrphans() {
 <template>
   <div>
     <div class="page-header">
-      <h2>Datenverwaltung</h2>
-      <p>FITS-Daten scannen und bereinigen</p>
+      <h2>{{ $t('scan.title') }}</h2>
+      <p>{{ $t('scan.description') }}</p>
     </div>
 
     <div class="tabs">
-      <button :class="['tab', { active: cleanupTab === 'scan' }]" @click="cleanupTab = 'scan'">Scan</button>
-      <button :class="['tab', { active: cleanupTab === 'cleanup' }]" @click="cleanupTab = 'cleanup'">Bereinigung</button>
+      <button :class="['tab', { active: cleanupTab === 'scan' }]" @click="cleanupTab = 'scan'">{{ $t('scan.tab_scan') }}</button>
+      <button :class="['tab', { active: cleanupTab === 'cleanup' }]" @click="cleanupTab = 'cleanup'">{{ $t('scan.tab_cleanup') }}</button>
     </div>
 
-    <!-- Scan Tab -->
     <template v-if="cleanupTab === 'scan'">
       <div class="card">
-        <h3>Scan-Pfad auswählen</h3>
+        <h3>{{ $t('scan.scan_path') }}</h3>
         <div class="scan-path-selector">
           <div class="filter-group">
-            <label>Verzeichnis</label>
+            <label>{{ $t('scan.scan_directory') }}</label>
             <select v-model="selectedPath">
               <option v-for="p in knownPaths" :key="p.value" :value="p.value">{{ p.label }}</option>
             </select>
           </div>
           <div class="filter-group">
-            <label>Oder benutzerdefiniert</label>
-            <input type="text" v-model="selectedPath" placeholder="/pfad/zu/fits/..." />
+            <label>{{ $t('scan.scan_custom') }}</label>
+            <input type="text" v-model="selectedPath" :placeholder="$t('scan.scan_placeholder')" />
           </div>
           <div class="scan-actions">
             <button class="btn btn-success" :disabled="btnDisabled" @click="startScan">
-              Scan starten
+              {{ $t('scan.scan_start') }}
             </button>
             <button v-if="scanStore.state.running" class="btn btn-danger" @click="scanStore.cancelScan()">
-              Abbrechen
+              {{ $t('scan.scan_cancel') }}
             </button>
           </div>
         </div>
@@ -177,59 +176,56 @@ async function cleanupOrphans() {
         <div class="scan-stats-row">
           <div class="scan-stat">
             <div class="num">{{ scanStore.state.total.toLocaleString() }}</div>
-            <div class="lbl">Total</div>
+            <div class="lbl">{{ $t('scan.scan_total') }}</div>
           </div>
           <div class="scan-stat">
             <div class="num">{{ scanStore.state.processed.toLocaleString() }}</div>
-            <div class="lbl">Gescannt</div>
+            <div class="lbl">{{ $t('scan.scan_processed') }}</div>
           </div>
           <div class="scan-stat">
             <div class="num">{{ scanStore.state.imported.toLocaleString() }}</div>
-            <div class="lbl">Importiert</div>
+            <div class="lbl">{{ $t('scan.scan_imported') }}</div>
           </div>
           <div class="scan-stat">
             <div class="num">{{ scanStore.state.skipped.toLocaleString() }}</div>
-            <div class="lbl">Übersprungen</div>
+            <div class="lbl">{{ $t('scan.scan_skipped') }}</div>
           </div>
         </div>
         <div class="current-file">{{ scanStore.state.current_file }}</div>
       </div>
 
       <div class="card">
-        <h3>Info</h3>
-        <p>Der Scan liest FITS-Header aus und importiert Metadaten in die Datenbank.
-           Bestehende Dateien werden übersprungen. Der Scan läuft im Hintergrund —
-           du kannst währenddessen weiterarbeiten.</p>
+        <h3>{{ $t('scan.scan_info_title') }}</h3>
+        <p>{{ $t('scan.scan_info_text') }}</p>
       </div>
     </template>
 
-    <!-- Cleanup Tab -->
     <template v-if="cleanupTab === 'cleanup'">
       <div class="card">
-        <h3>Frames suchen und löschen</h3>
+        <h3>{{ $t('scan.cleanup_title') }}</h3>
         <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 12px;">
-          Suche nach Frames anhand von Dateiname oder Pfad. Verwende * als Platzhalter.
+          {{ $t('scan.cleanup_desc') }}
         </p>
         <div class="cleanup-filters">
           <div class="filter-group">
-            <label>Suchfeld</label>
+            <label>{{ $t('scan.cleanup_field') }}</label>
             <select v-model="cleanupField">
-              <option value="filename">Dateiname</option>
-              <option value="filepath">Pfad</option>
+              <option value="filename">{{ $t('scan.cleanup_filename') }}</option>
+              <option value="filepath">{{ $t('scan.cleanup_filepath') }}</option>
             </select>
           </div>
           <div class="filter-group" style="flex: 1;">
-            <label>Suchmuster</label>
+            <label>{{ $t('scan.cleanup_pattern') }}</label>
             <input
               type="text"
               v-model="cleanupPattern"
-              placeholder="z.B. *bad* oder *c_*"
+              :placeholder="$t('scan.cleanup_pattern_placeholder')"
               @keydown="keydown"
             />
           </div>
           <div class="filter-group" style="align-self: flex-end;">
             <button class="btn" @click="searchFrames" :disabled="!cleanupPattern.trim() || cleanupLoading">
-              {{ cleanupLoading ? 'Suche...' : 'Suchen' }}
+              {{ cleanupLoading ? $t('scan.cleanup_searching') : $t('scan.cleanup_search') }}
             </button>
           </div>
         </div>
@@ -237,10 +233,10 @@ async function cleanupOrphans() {
 
       <div v-if="cleanupResults.length" class="card">
         <div class="cleanup-result-header">
-          <h3>{{ cleanupTotal }} Frames gefunden</h3>
+          <h3>{{ $t('scan.cleanup_found', { count: cleanupTotal }) }}</h3>
           <div class="cleanup-actions">
             <span style="font-size: 13px; color: var(--text-muted);">
-              {{ cleanupSelected.size }} ausgewählt
+              {{ $t('scan.cleanup_selected', { count: cleanupSelected.size }) }}
             </span>
             <button
               v-if="!cleanupConfirming"
@@ -248,17 +244,17 @@ async function cleanupOrphans() {
               :disabled="!cleanupSelected.size"
               @click="cleanupConfirming = true"
             >
-              Ausgewählte löschen
+              {{ $t('scan.cleanup_delete') }}
             </button>
             <template v-else>
               <span style="font-size: 13px; color: var(--danger);">
-                <strong>{{ cleanupSelected.size }} Frames wirklich löschen?</strong>
+                <strong>{{ $t('scan.cleanup_confirm', { count: cleanupSelected.size }) }}</strong>
               </span>
               <button class="btn btn-danger btn-sm" @click="deleteSelected" :disabled="cleanupBusy">
-                {{ cleanupBusy ? 'Lösche...' : 'Ja, löschen' }}
+                {{ cleanupBusy ? $t('scan.cleanup_deleting') : $t('scan.cleanup_confirm_yes') }}
               </button>
               <button class="btn btn-sm btn-ghost" @click="cleanupConfirming = false" :disabled="cleanupBusy">
-                Abbrechen
+                {{ $t('scan.cleanup_cancel') }}
               </button>
             </template>
           </div>
@@ -276,11 +272,11 @@ async function cleanupOrphans() {
                       @change="toggleSelectAll"
                     />
                   </th>
-                  <th>Dateiname</th>
-                  <th>Typ</th>
-                  <th>Filter</th>
-                  <th>Belichtung</th>
-                  <th>Pfad</th>
+                  <th>{{ $t('scan.col_filename') }}</th>
+                  <th>{{ $t('scan.col_type') }}</th>
+                  <th>{{ $t('scan.col_filter') }}</th>
+                  <th>{{ $t('scan.col_exposure') }}</th>
+                  <th>{{ $t('scan.col_path') }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -304,20 +300,19 @@ async function cleanupOrphans() {
         </div>
       </div>
 
-      <div v-else-if="cleanupLoading" class="loading">Suche nach Frames...</div>
+      <div v-else-if="cleanupLoading" class="loading">{{ $t('scan.cleanup_searching') }}</div>
       <div v-else-if="cleanupPattern && !cleanupLoading" class="card">
-        <p class="empty">Keine Frames gefunden.</p>
+        <p class="empty">{{ $t('scan.cleanup_not_found') }}</p>
       </div>
 
       <div class="card">
-        <h3>Verwaiste Einträge bereinigen</h3>
+        <h3>{{ $t('scan.cleanup_orphan_title') }}</h3>
         <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 12px;">
-          Entfernt Sessions ohne Frames, Targets ohne Sessions sowie nicht verwendete Kameras und Teleskope.
-          Wird automatisch nach jedem Löschvorgang ausgeführt.
+          {{ $t('scan.cleanup_orphan_desc') }}
         </p>
         <div class="orphan-actions">
           <button class="btn btn-sm" @click="cleanupOrphans" :disabled="cleanupOrphansBusy">
-            {{ cleanupOrphansBusy ? 'Bereinige...' : 'Verwaiste Einträge entfernen' }}
+            {{ cleanupOrphansBusy ? $t('scan.cleanup_orphan_busy') : $t('scan.cleanup_orphan_button') }}
           </button>
           <span v-if="cleanupOrphanResult" class="orphan-success">{{ cleanupOrphanResult }}</span>
         </div>

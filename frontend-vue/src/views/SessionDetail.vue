@@ -2,8 +2,10 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useApiStore, type Frame } from '@/stores/api'
+import { useI18n } from 'vue-i18n'
 import Pagination from '@/components/Pagination.vue'
 
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const apiStore = useApiStore()
@@ -51,7 +53,7 @@ async function updateStatus(newStatus: string) {
     await apiStore.patch(`/sessions/${sessionId.value}`, { status: newStatus })
     if (session.value) session.value.status = newStatus
   } catch (e: any) {
-    alert('Fehler: ' + (e.response?.data?.detail || e.message))
+    alert(t('error.generic', { message: e.response?.data?.detail || e.message }))
   } finally {
     statusUpdating.value = false
   }
@@ -149,7 +151,7 @@ async function openPreview(f: any) {
       previewThumb.value = null
     }
   } catch (e: any) {
-    alert('Fehler: ' + (e.response?.data?.detail || e.message))
+    alert(t('error.generic', { message: e.response?.data?.detail || e.message }))
   } finally {
     previewLoading.value = false
   }
@@ -184,15 +186,34 @@ const metadataEntries = computed(() => {
   if (!previewFrame.value) return []
   const entries: { label: string; value: string }[] = []
   const fields: Record<string, string> = {
-    filename: 'Dateiname', filepath: 'Pfad', file_size: 'Größe (Bytes)',
-    frame_type: 'Typ', object_name: 'Objekt', instrume: 'Kamera', telescop: 'Teleskop',
-    filter_name: 'Filter', exposure: 'Belichtung (s)', gain: 'Gain', ccd_temp: 'Temperatur (°C)',
-    binning: 'Binning', date_obs: 'Datum (UTC)', date_local: 'Datum (Lokal)',
-    width: 'Breite (px)', height: 'Höhe (px)', pixel_size_um: 'Pixelgröße (µm)',
-    ra_deg: 'RA (°)', dec_deg: 'DEC (°)', focal_length_mm: 'Brennweite (mm)',
-    site_name: 'Standort', observer: 'Beobachter', creator: 'Software',
-    fwhm: 'FWHM', eccentricity: 'Exzentrizität', snr: 'SNR',
-    hfd_median: 'HFD', stars_detected: 'Sterne',
+    filename: t('session_detail.meta_filename'),
+    filepath: t('session_detail.meta_filepath'),
+    file_size: t('session_detail.meta_file_size'),
+    frame_type: t('session_detail.meta_frame_type'),
+    object_name: t('session_detail.meta_object'),
+    instrume: t('session_detail.meta_camera'),
+    telescop: t('session_detail.meta_telescope'),
+    filter_name: t('session_detail.meta_filter'),
+    exposure: t('session_detail.meta_exposure'),
+    gain: t('session_detail.meta_gain'),
+    ccd_temp: t('session_detail.meta_temperature'),
+    binning: t('session_detail.meta_binning'),
+    date_obs: t('session_detail.meta_date_obs'),
+    date_local: t('session_detail.meta_date_local'),
+    width: t('session_detail.meta_width'),
+    height: t('session_detail.meta_height'),
+    pixel_size_um: t('session_detail.meta_pixel_size'),
+    ra_deg: t('session_detail.meta_ra'),
+    dec_deg: t('session_detail.meta_dec'),
+    focal_length_mm: t('session_detail.meta_focal_length'),
+    site_name: t('session_detail.meta_site'),
+    observer: t('session_detail.meta_observer'),
+    creator: t('session_detail.meta_creator'),
+    fwhm: t('session_detail.meta_fwhm'),
+    eccentricity: t('session_detail.meta_eccentricity'),
+    snr: t('session_detail.meta_snr'),
+    hfd_median: t('session_detail.meta_hfd'),
+    stars_detected: t('session_detail.meta_stars'),
   }
   for (const [key, label] of Object.entries(fields)) {
     const val = (previewFrame.value as any)[key]
@@ -214,21 +235,21 @@ const metadataEntries = computed(() => {
 <template>
   <div>
     <div class="breadcrumb">
-      <a @click="router.push('/sessions')">Sessions</a>
+      <a @click="router.push('/sessions')">{{ $t('sessions.title') }}</a>
       <span> / </span>
       <span class="active">{{ session?.target_name || '...' }}</span>
     </div>
 
     <div class="page-header">
-      <h2>{{ session?.target_name || 'Loading...' }}</h2>
+      <h2>{{ session?.target_name || $t('session_detail.loading') }}</h2>
       <p v-if="session">
         {{ session.camera_name || '-' }}
         <span v-if="session.date_obs"> &middot; {{ new Date(session.date_obs).toLocaleDateString('de-CH') }}</span>
-        &middot; {{ session.total_exposure_h }}h &middot; {{ session.frame_count }} Frames
+        &middot; {{ session.total_exposure_h }}h &middot; {{ session.frame_count }} {{ $t('sessions.col_frames') }}
         <select class="status-select" :value="session.status" @change="updateStatus(($event.target as HTMLSelectElement).value)" :disabled="statusUpdating">
-          <option value="raw">Raw</option>
-          <option value="calibrated">Kalibriert</option>
-          <option value="stacked">Gestackt</option>
+          <option value="raw">{{ $t('session_detail.status_raw') }}</option>
+          <option value="calibrated">{{ $t('session_detail.status_calibrated') }}</option>
+          <option value="stacked">{{ $t('session_detail.status_stacked') }}</option>
         </select>
       </p>
     </div>
@@ -241,12 +262,12 @@ const metadataEntries = computed(() => {
       </div>
       <div class="stat-card" v-for="item in stats.exposure_per_filter" :key="item.filter">
         <div class="value">{{ (item.total_s / 3600).toFixed(2) }}h</div>
-        <div class="label">{{ item.filter }} ({{ item.frames }} Frames)</div>
+        <div class="label">{{ item.filter }} ({{ item.frames }} {{ $t('sessions.col_frames') }})</div>
       </div>
     </div>
 
     <div class="card" v-if="thumbnails.length">
-      <h3>Letzte Aufnahmen</h3>
+      <h3>{{ $t('session_detail.recent_images') }}</h3>
       <div class="thumbnail-grid">
         <div v-for="t in thumbnails" :key="t.id" class="thumbnail-item" @click="openPreview(t)">
           <img v-if="t.thumbnail" :src="t.thumbnail" :alt="t.filename" class="thumb-img" />
@@ -259,18 +280,18 @@ const metadataEntries = computed(() => {
     </div>
 
     <div class="card">
-      <h3>Frames ({{ totalItems }})</h3>
+      <h3>{{ $t('session_detail.frames_title', { count: totalItems }) }}</h3>
 
       <!-- Frame type filter -->
       <div class="filters" v-if="frameTypes.length">
         <div class="filter-group">
-          <label>Typ</label>
+          <label>{{ $t('session_detail.filter_type') }}</label>
           <div class="btn-group">
             <button
               :class="['btn', 'btn-sm', { active: frameTypeFilter === '' }]"
               @click="frameTypeFilter = ''; page = 1"
             >
-              Alle
+              {{ $t('session_detail.filter_all') }}
             </button>
             <button
               v-for="ft in frameTypes"
@@ -288,15 +309,15 @@ const metadataEntries = computed(() => {
         <table class="data-table">
           <thead>
             <tr>
-              <th class="sortable" @click="toggleSort('date_obs')">Datum {{ sortIcon('date_obs') }}</th>
-              <th class="sortable" @click="toggleSort('frame_type')">Typ {{ sortIcon('frame_type') }}</th>
-              <th class="sortable" @click="toggleSort('filter_name')">Filter {{ sortIcon('filter_name') }}</th>
-              <th class="sortable" @click="toggleSort('exposure')">Belichtung {{ sortIcon('exposure') }}</th>
-              <th class="sortable" @click="toggleSort('gain')">Gain {{ sortIcon('gain') }}</th>
-              <th class="sortable" @click="toggleSort('ccd_temp')">Temp {{ sortIcon('ccd_temp') }}</th>
-              <th class="sortable" @click="toggleSort('binning')">Binning {{ sortIcon('binning') }}</th>
-              <th class="sortable" @click="toggleSort('hfd_median')">HFD {{ sortIcon('hfd_median') }}</th>
-              <th class="sortable" @click="toggleSort('stars_detected')">Stars {{ sortIcon('stars_detected') }}</th>
+              <th class="sortable" @click="toggleSort('date_obs')">{{ $t('session_detail.col_date') }} {{ sortIcon('date_obs') }}</th>
+              <th class="sortable" @click="toggleSort('frame_type')">{{ $t('session_detail.col_type') }} {{ sortIcon('frame_type') }}</th>
+              <th class="sortable" @click="toggleSort('filter_name')">{{ $t('session_detail.col_filter') }} {{ sortIcon('filter_name') }}</th>
+              <th class="sortable" @click="toggleSort('exposure')">{{ $t('session_detail.col_exposure') }} {{ sortIcon('exposure') }}</th>
+              <th class="sortable" @click="toggleSort('gain')">{{ $t('session_detail.col_gain') }} {{ sortIcon('gain') }}</th>
+              <th class="sortable" @click="toggleSort('ccd_temp')">{{ $t('session_detail.col_temp') }} {{ sortIcon('ccd_temp') }}</th>
+              <th class="sortable" @click="toggleSort('binning')">{{ $t('session_detail.col_binning') }} {{ sortIcon('binning') }}</th>
+              <th class="sortable" @click="toggleSort('hfd_median')">{{ $t('session_detail.col_hfd') }} {{ sortIcon('hfd_median') }}</th>
+              <th class="sortable" @click="toggleSort('stars_detected')">{{ $t('session_detail.col_stars') }} {{ sortIcon('stars_detected') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -327,9 +348,9 @@ const metadataEntries = computed(() => {
         </div>
         <div class="preview-body">
           <div class="preview-image">
-            <div v-if="previewLoading" class="loading">Lade Vorschaubild...</div>
+            <div v-if="previewLoading" class="loading">{{ $t('session_detail.preview_loading') }}</div>
             <img v-else-if="previewThumb" :src="previewThumb" :alt="previewFrame.filename" class="preview-img" />
-            <div v-else class="preview-noimg">Kein Vorschaubild verfügbar</div>
+            <div v-else class="preview-noimg">{{ $t('session_detail.preview_noimg') }}</div>
           </div>
           <div class="preview-metadata">
             <div class="table-responsive">
