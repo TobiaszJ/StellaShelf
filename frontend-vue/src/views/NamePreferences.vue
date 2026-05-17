@@ -65,8 +65,25 @@ function getOptions(obj: NamedObject): string[] {
   return [...new Set(opts)]
 }
 
+/** The name identify would use when no preference is set (first full name / common name). */
+function effectiveName(obj: NamedObject): string {
+  const names = getOptions(obj)
+  // Prefer first common name, fall back to first option
+  if (obj.common_names) {
+    const first = obj.common_names.split(',')[0].trim()
+    if (first) return first
+  }
+  return names[0] || obj.name
+}
+
 function selectPreference(obj: NamedObject, value: string) {
-  edits.value[obj.name] = value
+  if (value === '__custom__') {
+    edits.value[obj.name] = ''
+  } else if (value === effectiveName(obj)) {
+    delete edits.value[obj.name]
+  } else {
+    edits.value[obj.name] = value
+  }
 }
 
 async function saveAll() {
@@ -74,6 +91,7 @@ async function saveAll() {
   saveCount.value = 0
   try {
     for (const [ngcName, preferred] of Object.entries(edits.value)) {
+      if (!preferred) continue
       await apiStore.post('/catalog/name-preference', { ngc_name: ngcName, preferred_name: preferred })
       saveCount.value++
     }
@@ -138,13 +156,13 @@ async function saveAll() {
                 <td>
                   <div class="name-picker">
                     <select
-                      :value="edits[obj.name] || ''"
+                      :value="edits[obj.name] || effectiveName(obj)"
                       @change="(e) => selectPreference(obj, (e.target as HTMLSelectElement).value)"
                       class="name-select"
                     >
-                      <option value="">— Standard ({{ getOptions(obj)[0] || obj.name }}) —</option>
+                      <option :value="effectiveName(obj)" style="font-weight: 600">{{ effectiveName(obj) }} ⬅</option>
                       <option
-                        v-for="opt in getOptions(obj)"
+                        v-for="opt in getOptions(obj).filter(o => o !== effectiveName(obj))"
                         :key="opt"
                         :value="opt"
                       >{{ opt }}</option>
