@@ -49,5 +49,8 @@ frontend-vue/dist/
 # Build artifacts
 *.pyc
 
-# Local DB migrations (gitignored by design — see AGENTS.md)
+# Local DB migrations (gitignored by design)
 db_migrations/
+
+# Agent instructions (generated per session)
+AGENTS.md
