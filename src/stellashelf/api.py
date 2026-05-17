@@ -1709,9 +1709,10 @@ def merge_cameras(req: CameraMergeRequest):
         sess.query(CalibrationFile).filter(CalibrationFile.camera_id == source.id).update(
             {"camera_id": dest.id}
         )
+        source_name, dest_name = source.name, dest.name
         sess.delete(source)
         sess.commit()
-    return {"status": "ok", "source": source.name, "destination": dest.name}
+    return {"status": "ok", "source": source_name, "destination": dest_name}
 
 
 @app.post("/api/v1/telescopes/merge")
@@ -1728,9 +1729,10 @@ def merge_telescopes(req: TelescopeMergeRequest):
         sess.query(ObsSession).filter(ObsSession.telescope_id == source.id).update(
             {"telescope_id": dest.id}
         )
+        source_name, dest_name = source.name, dest.name
         sess.delete(source)
         sess.commit()
-    return {"status": "ok", "source": source.name, "destination": dest.name}
+    return {"status": "ok", "source": source_name, "destination": dest_name}
 
 
 @app.post("/api/v1/filters/merge")
