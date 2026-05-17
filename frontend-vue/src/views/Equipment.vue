@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useApiStore, type Camera, type Telescope, type FilterStat } from '@/stores/api'
+import { useApiStore, type Camera, type Telescope, type FilterStat, type PaginatedResponse } from '@/stores/api'
 import { useI18n } from 'vue-i18n'
 import Pagination from '@/components/Pagination.vue'
 
@@ -22,6 +22,16 @@ const pageSize = 20
 // Sorting
 const sortKey = ref('frame_count')
 const sortOrder = ref('desc')
+
+// Merge state
+const mergeSourceId = ref<number | null>(null)
+const mergeSourceName = ref('')
+const mergeSearch = ref('')
+const mergeResults = ref<any[]>([])
+const mergeLoading = ref(false)
+const mergeBusy = ref(false)
+const mergeConfirming = ref(false)
+const mergeDestination = ref<any>(null)
 
 onMounted(async () => {
   cameras.value = await apiStore.fetch<Camera[]>('/cameras')
@@ -46,14 +56,12 @@ const sortedItems = computed(() => {
     case 'filters': items = [...filters.value]; break
     default: items = []
   }
-
-  items.sort((a, b) => {
+  items.sort((a: any, b: any) => {
     const aVal = a[sortKey.value] ?? ''
     const bVal = b[sortKey.value] ?? ''
     const cmp = typeof aVal === 'string' ? aVal.localeCompare(bVal) : (aVal - bVal)
     return sortOrder.value === 'asc' ? cmp : -cmp
   })
-
   return items
 })
 
@@ -72,6 +80,87 @@ const sortIndicator = (key: string) => {
 
 function viewFrames(filterName: string) {
   router.push({ name: 'sessions', query: { filter_name: filterName } })
+}
+
+// Merge logic
+function openMerge(item: any) {
+  mergeSourceId.value = item.id || null
+  mergeSourceName.value = item.name || item
+  mergeSearch.value = ''
+  mergeResults.value = []
+  mergeDestination.value = null
+  mergeConfirming.value = false
+}
+
+function cancelMerge() {
+  mergeSourceId.value = null
+  mergeSourceName.value = ''
+  mergeSearch.value = ''
+  mergeResults.value = []
+  mergeDestination.value = null
+  mergeConfirming.value = false
+}
+
+async function searchMergeTargets() {
+  if (!mergeSearch.value.trim()) {
+    mergeResults.value = []
+    return
+  }
+  mergeLoading.value = true
+  try {
+    if (activeTab.value === 'cameras') {
+      mergeResults.value = cameras.value.filter(
+        c => c.id !== mergeSourceId.value && c.name.toLowerCase().includes(mergeSearch.value.toLowerCase())
+      )
+    } else if (activeTab.value === 'telescopes') {
+      const all = telescopes.value.filter(t => t.id !== mergeSourceId.value && t.name.toLowerCase().includes(mergeSearch.value.toLowerCase()))
+      mergeResults.value = all
+    } else if (activeTab.value === 'filters') {
+      const all = filters.value.filter(f => f.name.toLowerCase() !== mergeSourceName.value.toLowerCase() && f.name.toLowerCase().includes(mergeSearch.value.toLowerCase()))
+      mergeResults.value = all
+    }
+  } catch {
+    mergeResults.value = []
+  } finally {
+    mergeLoading.value = false
+  }
+}
+
+function selectMergeDestination(item: any) {
+  mergeDestination.value = item
+  mergeSearch.value = item.name || item
+  mergeResults.value = []
+}
+
+async function doMerge() {
+  if (!mergeDestination.value || mergeSourceId.value === null) return
+  mergeBusy.value = true
+  try {
+    if (activeTab.value === 'cameras') {
+      await apiStore.post('/cameras/merge', {
+        source_id: mergeSourceId.value,
+        destination_id: mergeDestination.value.id,
+      })
+      cameras.value = await apiStore.fetch<Camera[]>('/cameras')
+    } else if (activeTab.value === 'telescopes') {
+      await apiStore.post('/telescopes/merge', {
+        source_id: mergeSourceId.value,
+        destination_id: mergeDestination.value.id,
+      })
+      telescopes.value = await apiStore.fetch<Telescope[]>('/telescopes')
+    } else if (activeTab.value === 'filters') {
+      await apiStore.post('/filters/merge', {
+        source_name: mergeSourceName.value,
+        destination_name: mergeDestination.value.name,
+      })
+      filters.value = await apiStore.fetch<FilterStat[]>('/filters')
+    }
+    cancelMerge()
+  } catch (e: any) {
+    alert('Fehler: ' + (e.response?.data?.detail || e.message))
+  } finally {
+    mergeBusy.value = false
+  }
 }
 </script>
 
@@ -105,6 +194,7 @@ function viewFrames(filterName: string) {
               <th class="sortable" @click="toggleSort('pixel_size_um')">{{ $t('equipment.col_pixel') }}{{ sortIndicator('pixel_size_um') }}</th>
               <th class="sortable" @click="toggleSort('frame_count')">{{ $t('equipment.col_frames') }}{{ sortIndicator('frame_count') }}</th>
               <th class="sortable" @click="toggleSort('total_exposure_h')">{{ $t('equipment.col_exposure') }}{{ sortIndicator('total_exposure_h') }}</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -113,6 +203,7 @@ function viewFrames(filterName: string) {
               <td>{{ c.pixel_size_um ? c.pixel_size_um + 'µm' : '-' }}</td>
               <td>{{ c.frame_count }}</td>
               <td>{{ c.total_exposure_h }}h</td>
+              <td><button class="btn btn-sm btn-outline" @click.stop="openMerge(c)">Merge</button></td>
             </tr>
           </tbody>
         </table>
@@ -130,6 +221,7 @@ function viewFrames(filterName: string) {
               <th class="sortable" @click="toggleSort('focal_length_mm')">{{ $t('equipment.col_focal') }}{{ sortIndicator('focal_length_mm') }}</th>
               <th class="sortable" @click="toggleSort('frame_count')">{{ $t('equipment.col_frames') }}{{ sortIndicator('frame_count') }}</th>
               <th class="sortable" @click="toggleSort('total_exposure_h')">{{ $t('equipment.col_exposure') }}{{ sortIndicator('total_exposure_h') }}</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -138,6 +230,7 @@ function viewFrames(filterName: string) {
               <td>{{ t.focal_length_mm ? t.focal_length_mm + ' mm' : '-' }}</td>
               <td>{{ t.frame_count }}</td>
               <td>{{ t.total_exposure_h }}h</td>
+              <td><button class="btn btn-sm btn-outline" @click.stop="openMerge(t)">Merge</button></td>
             </tr>
           </tbody>
         </table>
@@ -154,6 +247,7 @@ function viewFrames(filterName: string) {
               <th class="sortable" @click="toggleSort('name')">{{ $t('equipment.col_name') }}{{ sortIndicator('name') }}</th>
               <th class="sortable" @click="toggleSort('frame_count')">{{ $t('equipment.col_frames') }}{{ sortIndicator('frame_count') }}</th>
               <th class="sortable" @click="toggleSort('total_exposure_h')">{{ $t('equipment.col_exposure') }}{{ sortIndicator('total_exposure_h') }}</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -161,6 +255,7 @@ function viewFrames(filterName: string) {
               <td><strong>{{ f.name }}</strong></td>
               <td>{{ f.frame_count }}</td>
               <td>{{ f.total_exposure_h }}h</td>
+              <td><button class="btn btn-sm btn-outline" @click.stop="openMerge(f)">Merge</button></td>
             </tr>
           </tbody>
         </table>
@@ -168,6 +263,48 @@ function viewFrames(filterName: string) {
     </div>
 
     <Pagination :total="totalItems" :page="page" :pages="totalPages" @update:page="page = $event" />
+
+    <!-- Merge Modal -->
+    <div v-if="mergeSourceId !== null || activeTab === 'filters' && mergeSourceName" class="modal-overlay" @click.self="cancelMerge">
+      <div class="modal">
+        <h3>{{ activeTab === 'cameras' ? 'Kamera zusammenführen' : activeTab === 'telescopes' ? 'Teleskop zusammenführen' : 'Filter zusammenführen' }}</h3>
+        <p style="margin-bottom: 12px; color: var(--text-muted); font-size: 13px;">
+          <strong>{{ mergeSourceName }}</strong> mit einem anderen {{ activeTab === 'cameras' ? 'Kamera' : activeTab === 'telescopes' ? 'Teleskop' : 'Filter' }} zusammenführen.
+          Alle Sessions und Frames werden auf das Ziel übertragen.
+        </p>
+
+        <div v-if="!mergeDestination">
+          <label>Ziel {{ activeTab === 'cameras' ? 'Kamera' : activeTab === 'telescopes' ? 'Teleskop' : 'Filter' }} suchen</label>
+          <input v-model="mergeSearch" type="text" placeholder="Name eingeben..." class="merge-search-input" @input="searchMergeTargets" />
+          <div v-if="mergeLoading" class="loading" style="padding: 12px;">Suche...</div>
+          <div v-else-if="mergeResults.length" class="merge-results">
+            <div v-for="item in mergeResults" :key="item.id || item.name" class="merge-result-item" @click="selectMergeDestination(item)">
+              <strong>{{ item.name || item }}</strong>
+              <span style="color: var(--text-muted); font-size: 12px;">
+                {{ item.frame_count || 0 }} Frames
+              </span>
+            </div>
+          </div>
+          <p v-else-if="mergeSearch && !mergeLoading" class="empty" style="padding: 12px;">Keine Einträge gefunden.</p>
+        </div>
+
+        <div v-else>
+          <div class="merge-confirm">
+            <div class="merge-arrow">
+              <span class="merge-from">{{ mergeSourceName }}</span>
+              <span class="merge-arrow-sym">→</span>
+              <span class="merge-to">{{ mergeDestination.name || mergeDestination }}</span>
+            </div>
+            <div class="merge-actions" style="margin-top: 16px;">
+              <button class="btn btn-danger" @click="doMerge" :disabled="mergeBusy">
+                {{ mergeBusy ? 'Führe zusammen...' : 'Bestätigen & Zusammenführen' }}
+              </button>
+              <button class="btn btn-ghost" @click="cancelMerge" :disabled="mergeBusy">Abbrechen</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -195,4 +332,69 @@ function viewFrames(filterName: string) {
 th.sortable { cursor: pointer; user-select: none; }
 th.sortable:hover { color: var(--text); }
 .text-faint { color: var(--text-faint); font-size: 12px; }
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 480px;
+  width: 90%;
+}
+.merge-search-input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  width: 100%;
+  margin-top: 4px;
+}
+.merge-search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.merge-results {
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.merge-result-item {
+  padding: 10px 12px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.merge-result-item:hover {
+  background: rgba(255,255,255,0.03);
+}
+.merge-result-item + .merge-result-item {
+  border-top: 1px solid var(--border);
+}
+.merge-arrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: center;
+  padding: 16px;
+  background: var(--bg);
+  border-radius: 8px;
+}
+.merge-arrow-sym { font-size: 20px; color: var(--accent); }
+.merge-from { font-weight: 600; color: var(--danger); }
+.merge-to { font-weight: 700; color: var(--accent2); }
+.merge-actions { display: flex; gap: 8px; }
 </style>

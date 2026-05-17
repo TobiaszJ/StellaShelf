@@ -20,7 +20,16 @@ from sqlalchemy import text
 from stellashelf import __build__, __version__
 from stellashelf.catalog import normalize_object_name
 from stellashelf.config import DEFAULT_DB_PATH
-from stellashelf.db import CalibrationFile, Camera, Frame, Setting, Target, Telescope, init_db
+from stellashelf.db import (
+    CalibrationFile,
+    Camera,
+    Filter,
+    Frame,
+    Setting,
+    Target,
+    Telescope,
+    init_db,
+)
 from stellashelf.db import Session as ObsSession
 from stellashelf.importer import ImporterService
 from stellashelf.scanner import analyse_frame, generate_thumbnail, platesolve_frame
@@ -1661,6 +1670,82 @@ def list_filters():
             }
             for r in results
         ]
+
+
+# ---------------------------------------------------------------------------
+# Equipment merge
+# ---------------------------------------------------------------------------
+
+
+class CameraMergeRequest(BaseModel):
+    source_id: int
+    destination_id: int
+
+
+class TelescopeMergeRequest(BaseModel):
+    source_id: int
+    destination_id: int
+
+
+class FilterMergeRequest(BaseModel):
+    source_name: str
+    destination_name: str
+
+
+@app.post("/api/v1/cameras/merge")
+def merge_cameras(req: CameraMergeRequest):
+    """Merge source camera into destination. Reassigns sessions + calibration files."""
+    if req.source_id == req.destination_id:
+        raise HTTPException(400, "Cannot merge a camera into itself")
+    engine, SessionLocal = get_session_local()
+    with SessionLocal() as sess:
+        source = sess.get(Camera, req.source_id)
+        dest = sess.get(Camera, req.destination_id)
+        if not source or not dest:
+            raise HTTPException(404, "Source or destination camera not found")
+        sess.query(ObsSession).filter(ObsSession.camera_id == source.id).update(
+            {"camera_id": dest.id}
+        )
+        sess.query(CalibrationFile).filter(CalibrationFile.camera_id == source.id).update(
+            {"camera_id": dest.id}
+        )
+        sess.delete(source)
+        sess.commit()
+    return {"status": "ok", "source": source.name, "destination": dest.name}
+
+
+@app.post("/api/v1/telescopes/merge")
+def merge_telescopes(req: TelescopeMergeRequest):
+    """Merge source telescope into destination. Reassigns sessions."""
+    if req.source_id == req.destination_id:
+        raise HTTPException(400, "Cannot merge a telescope into itself")
+    engine, SessionLocal = get_session_local()
+    with SessionLocal() as sess:
+        source = sess.get(Telescope, req.source_id)
+        dest = sess.get(Telescope, req.destination_id)
+        if not source or not dest:
+            raise HTTPException(404, "Source or destination telescope not found")
+        sess.query(ObsSession).filter(ObsSession.telescope_id == source.id).update(
+            {"telescope_id": dest.id}
+        )
+        sess.delete(source)
+        sess.commit()
+    return {"status": "ok", "source": source.name, "destination": dest.name}
+
+
+@app.post("/api/v1/filters/merge")
+def merge_filters(req: FilterMergeRequest):
+    """Merge source filter name into destination. Reassigns all frames."""
+    if req.source_name == req.destination_name:
+        raise HTTPException(400, "Cannot merge a filter into itself")
+    engine, SessionLocal = get_session_local()
+    with SessionLocal() as sess:
+        sess.query(Frame).filter(Frame.filter_name == req.source_name).update(
+            {"filter_name": req.destination_name}
+        )
+        sess.query(Filter).filter(Filter.name == req.source_name).delete()
+        sess.commit()
+    return {"status": "ok", "source": req.source_name, "destination": req.destination_name}
 
 
 # ---------------------------------------------------------------------------
