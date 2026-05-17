@@ -5,6 +5,9 @@ import { useApiStore, type Frame } from '@/stores/api'
 import { useI18n } from 'vue-i18n'
 import Pagination from '@/components/Pagination.vue'
 import FramePreviewModal from '@/components/FramePreviewModal.vue'
+import { usePlatesolveStore } from '@/stores/platesolve'
+import { useAnalyseStore } from '@/stores/analyse'
+import { useIdentifyStore } from '@/stores/identify'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -115,11 +118,17 @@ function closePreview() {
 const taskBusy = ref(false)
 const taskStarted = ref<string | null>(null)
 
+const platesolveStore = usePlatesolveStore()
+const analyseStore = useAnalyseStore()
+const identifyStore = useIdentifyStore()
+
 async function runTask(task: string) {
   taskBusy.value = true
   taskStarted.value = null
   try {
     await apiStore.post(`/${task}`, {}, { session_id: sessionId.value })
+    const store = { platesolve: platesolveStore, analyse: analyseStore, identify: identifyStore }[task]
+    if (store) store.startPolling()
     taskStarted.value = task
     setTimeout(() => { taskStarted.value = null }, 3000)
   } catch (e: any) {
