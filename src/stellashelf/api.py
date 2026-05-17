@@ -1790,7 +1790,12 @@ def _run_platesolve_task():
                 with _platesolve_lock:
                     if _platesolve_state.get("cancelled"):
                         log_entries.append(
-                            {"frame": frame.filename, "status": "cancelled", "detail": "Cancelled"}
+                            {
+                                "frame": frame.filename,
+                                "frame_id": frame.id,
+                                "status": "cancelled",
+                                "detail": "Cancelled",
+                            }
                         )
                         break
 
@@ -1798,7 +1803,12 @@ def _run_platesolve_task():
                 if not fp.exists():
                     failed += 1
                     log_entries.append(
-                        {"frame": frame.filename, "status": "failed", "detail": "File not found"}
+                        {
+                            "frame": frame.filename,
+                            "frame_id": frame.id,
+                            "status": "failed",
+                            "detail": "File not found",
+                        }
                     )
                     with _platesolve_lock:
                         _platesolve_state["failed"] = failed
@@ -1824,6 +1834,7 @@ def _run_platesolve_task():
                     log_entries.append(
                         {
                             "frame": frame.filename,
+                            "frame_id": frame.id,
                             "status": "solved",
                             "detail": f"RA={result['ra_deg']:.4f}° Dec={result['dec_deg']:.4f}°",
                         }
@@ -1831,7 +1842,12 @@ def _run_platesolve_task():
                 else:
                     failed += 1
                     log_entries.append(
-                        {"frame": frame.filename, "status": "failed", "detail": "No solution found"}
+                        {
+                            "frame": frame.filename,
+                            "frame_id": frame.id,
+                            "status": "failed",
+                            "detail": "No solution found",
+                        }
                     )
 
                 with _platesolve_lock:
@@ -1931,7 +1947,12 @@ def _run_analyse_task():
                 with _analyse_lock:
                     if _analyse_state.get("cancelled"):
                         log_entries.append(
-                            {"frame": frame.filename, "status": "cancelled", "detail": "Cancelled"}
+                            {
+                                "frame": frame.filename,
+                                "frame_id": frame.id,
+                                "status": "cancelled",
+                                "detail": "Cancelled",
+                            }
                         )
                         break
 
@@ -1939,7 +1960,12 @@ def _run_analyse_task():
                 if not fp.exists():
                     failed += 1
                     log_entries.append(
-                        {"frame": frame.filename, "status": "failed", "detail": "File not found"}
+                        {
+                            "frame": frame.filename,
+                            "frame_id": frame.id,
+                            "status": "failed",
+                            "detail": "File not found",
+                        }
                     )
                     with _analyse_lock:
                         _analyse_state["failed"] = failed
@@ -1954,6 +1980,7 @@ def _run_analyse_task():
                     log_entries.append(
                         {
                             "frame": frame.filename,
+                            "frame_id": frame.id,
                             "status": "analysed",
                             "detail": f"HFD={result['hfd_median']:.1f} stars={result['stars_detected']}",
                         }
@@ -1961,7 +1988,12 @@ def _run_analyse_task():
                 else:
                     failed += 1
                     log_entries.append(
-                        {"frame": frame.filename, "status": "failed", "detail": "Analysis failed"}
+                        {
+                            "frame": frame.filename,
+                            "frame_id": frame.id,
+                            "status": "failed",
+                            "detail": "Analysis failed",
+                        }
                     )
 
                 with _analyse_lock:
@@ -2054,7 +2086,12 @@ def _run_identify_task():
                 with _identify_lock:
                     if _identify_state.get("cancelled"):
                         log_entries.append(
-                            {"frame": frame.filename, "status": "cancelled", "detail": "Cancelled"}
+                            {
+                                "frame": frame.filename,
+                                "frame_id": frame.id,
+                                "status": "cancelled",
+                                "detail": "Cancelled",
+                            }
                         )
                         break
 
@@ -2071,6 +2108,7 @@ def _run_identify_task():
                     log_entries.append(
                         {
                             "frame": frame.filename,
+                            "frame_id": frame.id,
                             "status": "failed",
                             "detail": "No object found in field",
                         }
@@ -2127,6 +2165,7 @@ def _run_identify_task():
                 log_entries.append(
                     {
                         "frame": frame.filename,
+                        "frame_id": frame.id,
                         "status": "identified",
                         "detail": f"{norm_name} ({target_name})",
                     }

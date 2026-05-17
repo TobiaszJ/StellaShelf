@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, useSlots } from 'vue'
+import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import FramePreviewModal from '@/components/FramePreviewModal.vue'
 
 const { t } = useI18n()
 
@@ -15,10 +16,12 @@ const props = defineProps<{
   total: number
   doneCount: number
   failed: number
-  log: Array<{ frame: string; status: string; detail: string }>
+  log: Array<{ frame: string; frame_id?: number; status: string; detail: string }>
   onStart: () => void
   onCancel: () => void
 }>()
+
+const previewFrameId = ref<number | null>(null)
 
 const progress = computed(() => {
   const done = props.doneCount + props.failed
@@ -100,11 +103,17 @@ const showProgress = computed(() => props.running || props.phase !== 'idle')
       <div class="log-container">
         <div v-for="(entry, i) in log" :key="i" class="log-entry" :class="'log-' + entry.status">
           <span class="log-status">{{ entry.status === 'solved' || entry.status === 'analysed' || entry.status === 'identified' ? '✓' : entry.status === 'failed' ? '✗' : entry.status === 'cancelled' ? '⬛' : '⚠' }}</span>
-          <span class="log-frame">{{ entry.frame || '-' }}</span>
+          <span
+            class="log-frame"
+            :class="{ clickable: entry.frame_id != null }"
+            @click="entry.frame_id != null && (previewFrameId = entry.frame_id)"
+          >{{ entry.frame || '-' }}</span>
           <span class="log-detail">{{ entry.detail }}</span>
         </div>
       </div>
     </div>
+
+    <FramePreviewModal :frameId="previewFrameId" @close="previewFrameId = null" />
   </div>
 </template>
 
@@ -149,5 +158,7 @@ const showProgress = computed(() => props.running || props.phase !== 'idle')
 .log-error { color: var(--danger); }
 .log-status { width: 16px; text-align: center; flex-shrink: 0; }
 .log-frame { color: var(--text); min-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log-frame.clickable { cursor: pointer; text-decoration: underline; text-decoration-color: var(--text-muted); text-underline-offset: 2px; }
+.log-frame.clickable:hover { color: var(--accent); text-decoration-color: var(--accent); }
 .log-detail { color: var(--text-muted); }
 </style>
