@@ -12,6 +12,7 @@ import Identify from '@/views/Identify.vue'
 import Help from '@/views/Help.vue'
 import TargetDetail from '@/views/TargetDetail.vue'
 import SessionDetail from '@/views/SessionDetail.vue'
+import NamePreferences from '@/views/NamePreferences.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -28,6 +29,7 @@ const router = createRouter({
     { path: '/analyse', name: 'analyse', component: Analyse },
     { path: '/identify', name: 'identify', component: Identify },
     { path: '/help', name: 'help', component: Help },
+    { path: '/name-preferences', name: 'name-preferences', component: NamePreferences },
     { path: '/scan', name: 'scan', component: Scan },
   ],
 })

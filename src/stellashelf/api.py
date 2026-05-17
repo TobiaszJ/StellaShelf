@@ -2119,6 +2119,12 @@ def _run_identify_task(session_id: int | None = None, target_id: int | None = No
                 _identify_state["total"] = total
                 _identify_state["log"] = []
 
+            # Load user name preferences once
+            name_prefs = {
+                row.key.replace("name_pref_", ""): row.value
+                for row in sess.query(Setting).filter(Setting.key.like("name_pref_%")).all()
+            }
+
             for frame in frames:
                 with _identify_lock:
                     if _identify_state.get("cancelled"):
@@ -2156,6 +2162,10 @@ def _run_identify_task(session_id: int | None = None, target_id: int | None = No
                     continue
 
                 target_name = resolve_target_name(obj)
+                # Check user name preference
+                pref = name_prefs.get(obj["name"])
+                if pref:
+                    target_name = pref
                 norm_name = normalize_object_name(target_name)
                 # Preserve original CSV casing for common/names (non-catalog),
                 # but normalize catalog names (M51, NGC5194, etc.)
@@ -2236,6 +2246,93 @@ def _run_identify_task(session_id: int | None = None, target_id: int | None = No
             _identify_state["log"] = _identify_state.get("log", []) + [
                 {"frame": "", "status": "error", "detail": str(e)}
             ]
+
+
+# ---------------------------------------------------------------------------
+# Object name preferences
+# ---------------------------------------------------------------------------
+
+
+class NamedObjectSchema(BaseModel):
+    name: str
+    messier: str | None = None
+    common_names: str | None = None
+    object_type: str | None = None
+    constellation: str | None = None
+    ra_deg: float | None = None
+    dec_deg: float | None = None
+    preferred_name: str | None = None
+
+
+@app.get("/api/v1/catalog/named-objects")
+def list_named_objects():
+    """List all OpenNGC objects that have common names or Messier designations."""
+    engine, SessionLocal = get_session_local()
+    cat = None
+    try:
+        from stellashelf.skylookup import load_catalog
+
+        cat = load_catalog()
+    except Exception:
+        return []
+
+    with SessionLocal() as sess:
+        saved = {
+            row.key.replace("name_pref_", ""): row.value
+            for row in sess.query(Setting).filter(Setting.key.like("name_pref_%")).all()
+        }
+
+    results = []
+    for row in cat["rows"]:
+        if not row["common_names"] and not row["messier"]:
+            continue
+        pref = saved.get(row["name"])
+        results.append(
+            {
+                "name": row["name"],
+                "messier": row["messier"] or None,
+                "common_names": row["common_names"] or None,
+                "object_type": row["type"],
+                "constellation": row["constellation"],
+                "ra_deg": row["ra_deg"],
+                "dec_deg": row["dec_deg"],
+                "preferred_name": pref,
+            }
+        )
+
+    return results
+
+
+class NamePreferenceRequest(BaseModel):
+    ngc_name: str
+    preferred_name: str
+
+
+@app.post("/api/v1/catalog/name-preference")
+def set_name_preference(req: NamePreferenceRequest):
+    """Save a preferred name for a catalog object."""
+    engine, SessionLocal = get_session_local()
+    with SessionLocal() as sess:
+        key = f"name_pref_{req.ngc_name}"
+        existing = sess.query(Setting).filter(Setting.key == key).first()
+        if existing:
+            existing.value = req.preferred_name
+        else:
+            setting = Setting(key=key, value=req.preferred_name)
+            sess.add(setting)
+        sess.commit()
+    return {"status": "ok"}
+
+
+@app.post("/api/v1/catalog/name-preference/clear")
+def clear_name_preference(ngc_name: str = Query(...)):
+    """Remove a saved name preference for a catalog object."""
+    engine, SessionLocal = get_session_local()
+    key = f"name_pref_{ngc_name}"
+    with SessionLocal() as sess:
+        sess.query(Setting).filter(Setting.key == key).delete()
+        sess.commit()
+    return {"status": "ok"}
 
 
 # ---------------------------------------------------------------------------

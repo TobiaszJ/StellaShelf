@@ -2,7 +2,7 @@
 import { ref, onMounted, watch } from 'vue'
 import { useRouter, RouterView, RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Telescope, Target, Camera, ScanLine, Search, Settings as SettingsIcon, HelpCircle, Globe, Sun, Moon, Activity, LayoutDashboard, List, Crosshair, Menu, X, Languages } from 'lucide-vue-next'
+import { Telescope, Target, Camera, ScanLine, Search, Settings as SettingsIcon, HelpCircle, Globe, Sun, Moon, Activity, LayoutDashboard, List, Crosshair, Menu, X, Languages, Bookmark } from 'lucide-vue-next'
 import { useScanStore } from '@/stores/scan'
 import { usePlatesolveStore } from '@/stores/platesolve'
 import { useAnalyseStore } from '@/stores/analyse'
@@ -165,6 +165,10 @@ function toggleTheme() {
         <RouterLink to="/settings" class="nav-item" @click="closeSidebar">
           <SettingsIcon :size="18" />
           <span class="nav-label">{{ t('nav.settings') }}</span>
+        </RouterLink>
+        <RouterLink to="/name-preferences" class="nav-item" @click="closeSidebar">
+          <Bookmark :size="18" />
+          <span class="nav-label">Objektnamen</span>
         </RouterLink>
         <RouterLink to="/help" class="nav-item" @click="closeSidebar">
           <HelpCircle :size="18" />
