@@ -1,15 +1,14 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n'
+import { storeToRefs } from 'pinia'
 import { usePlatesolveStore } from '@/stores/platesolve'
 import BackgroundTaskRunner from '@/components/BackgroundTaskRunner.vue'
 
-const { t } = useI18n()
 const store = usePlatesolveStore()
-const st = store.state
+const { state, progress, phaseLabel } = storeToRefs(store)
 
 function start() {
   store.startPlatesolve().catch((e: any) => {
-    alert(t('error.generic', { message: e.response?.data?.detail || e.message }))
+    alert('Fehler: ' + (e.response?.data?.detail || e.message))
   })
 }
 
@@ -20,16 +19,17 @@ function cancel() {
 
 <template>
   <BackgroundTaskRunner
-    :title="t('task.platesolve_title')"
-    :description="t('task.platesolve_desc')"
-    :actionLabel="t('task.start_platesolve')"
-    :runningLabel="t('task.running_platesolve')"
-    :running="st.running"
-    :phase="st.phase"
-    :total="st.total"
-    :doneCount="st.solved"
-    :failed="st.failed"
-    :log="st.log"
+    :key="'platesolve-'+state.phase"
+    title="Platesolving"
+    description="Koordinaten für Frames ohne RA/Dec bestimmen"
+    actionLabel="Platesolving starten"
+    runningLabel="Platesolving läuft..."
+    :running="state.running"
+    :phase="state.phase"
+    :total="state.total"
+    :doneCount="state.solved"
+    :failed="state.failed"
+    :log="state.log"
     :onStart="start"
     :onCancel="cancel"
   />

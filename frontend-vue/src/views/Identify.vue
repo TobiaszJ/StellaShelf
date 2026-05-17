@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import { storeToRefs } from 'pinia'
 import { useIdentifyStore } from '@/stores/identify'
 import BackgroundTaskRunner from '@/components/BackgroundTaskRunner.vue'
 
 const store = useIdentifyStore()
-const st = store.state
+const { state, progress, phaseLabel } = storeToRefs(store)
 
 function start() {
   store.startIdentify().catch((e: any) => {
@@ -18,17 +19,18 @@ function cancel() {
 
 <template>
   <BackgroundTaskRunner
+    :key="'identify-'+state.phase"
     title="Objekt Identifikation"
     description="Deep-Sky-Objekte aus RA/Dec-Koordinaten bestimmen"
     extraDescription="Es wird das grösste Objekt aus dem OpenNGC-Katalog (NGC/IC/Messier/common name) im Bildfeld ausgewählt. Frames werden automatisch dem passenden Target zugeordnet."
     actionLabel="Identifikation starten"
     runningLabel="Identifikation läuft..."
-    :running="st.running"
-    :phase="st.phase"
-    :total="st.total"
-    :doneCount="st.identified"
-    :failed="st.failed"
-    :log="st.log"
+    :running="state.running"
+    :phase="state.phase"
+    :total="state.total"
+    :doneCount="state.identified"
+    :failed="state.failed"
+    :log="state.log"
     :onStart="start"
     :onCancel="cancel"
   />
