@@ -29,12 +29,15 @@ const mergeLoading = ref(false)
 const targetId = computed(() => parseInt(route.params.id as string))
 
 const taskBusy = ref(false)
+const taskStarted = ref<string | null>(null)
 
 async function runTask(task: string) {
   taskBusy.value = true
+  taskStarted.value = null
   try {
     await apiStore.post(`/${task}`, {}, { target_id: targetId.value })
-    router.push({ name: task })
+    taskStarted.value = task
+    setTimeout(() => { taskStarted.value = null }, 3000)
   } catch (e: any) {
     alert(t('error.generic', { message: e.response?.data?.detail || e.message }))
   } finally {
@@ -204,9 +207,14 @@ watch(mergeSearch, searchMergeTargets)
         </button>
       </div>
       <div class="task-toolbar" v-if="target">
-        <button class="btn btn-sm btn-outline" :disabled="taskBusy" @click="runTask('platesolve')">🔍 Platesolve</button>
-        <button class="btn btn-sm btn-outline" :disabled="taskBusy" @click="runTask('analyse')">📊 Analyse</button>
-        <button class="btn btn-sm btn-outline" :disabled="taskBusy" @click="runTask('identify')">🎯 Identify</button>
+        <button v-if="taskStarted !== 'platesolve'" class="btn btn-sm btn-outline" :disabled="taskBusy" @click="runTask('platesolve')">🔍 Platesolve</button>
+        <span v-else class="task-started">✅ Platesolve gestartet</span>
+
+        <button v-if="taskStarted !== 'analyse'" class="btn btn-sm btn-outline" :disabled="taskBusy" @click="runTask('analyse')">📊 Analyse</button>
+        <span v-else class="task-started">✅ Analyse gestartet</span>
+
+        <button v-if="taskStarted !== 'identify'" class="btn btn-sm btn-outline" :disabled="taskBusy" @click="runTask('identify')">🎯 Identify</button>
+        <span v-else class="task-started">✅ Identify gestartet</span>
       </div>
     </div>
 
@@ -335,6 +343,15 @@ watch(mergeSearch, searchMergeTargets)
 </template>
 
 <style scoped>
+.task-started {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent2);
+  padding: 4px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
 .task-toolbar {
   display: flex;
   gap: 6px;
