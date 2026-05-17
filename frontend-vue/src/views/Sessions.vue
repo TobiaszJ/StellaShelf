@@ -15,6 +15,8 @@ const totalPages = ref(1)
 const totalItems = ref(0)
 const statusFilter = ref('')
 const filterName = ref('')
+const cameraId = ref<number | null>(null)
+const telescopeId = ref<number | null>(null)
 const sortBy = ref('date_obs')
 const sortOrder = ref('desc')
 
@@ -39,12 +41,18 @@ function sortIcon(col: string): string {
   return sortOrder.value === 'asc' ? '↑' : '↓'
 }
 
-// Read filter query param from Equipment view navigation
+// Read filter query params from Equipment view navigation
 if (route.query.filter_name) {
   filterName.value = route.query.filter_name as string
 }
 if (route.query.filter) {
   statusFilter.value = route.query.filter as string
+}
+if (route.query.camera_id) {
+  cameraId.value = parseInt(route.query.camera_id as string)
+}
+if (route.query.telescope_id) {
+  telescopeId.value = parseInt(route.query.telescope_id as string)
 }
 
 async function load() {
@@ -56,13 +64,15 @@ async function load() {
   }
   if (statusFilter.value) params.status = statusFilter.value
   if (filterName.value) params.filter_name = filterName.value
+  if (cameraId.value) params.camera_id = cameraId.value
+  if (telescopeId.value) params.telescope_id = telescopeId.value
   const res = await apiStore.fetch<PaginatedResponse<Session>>('/sessions', params)
   sessions.value = res.items
   totalPages.value = res.pages
   totalItems.value = res.total
 }
 
-watch([page, statusFilter, filterName, sortBy, sortOrder], load, { immediate: true })
+watch([page, statusFilter, filterName, cameraId, telescopeId, sortBy, sortOrder], load, { immediate: true })
 
 </script>
 
@@ -72,6 +82,8 @@ watch([page, statusFilter, filterName, sortBy, sortOrder], load, { immediate: tr
       <h2>{{ $t('sessions.title') }}</h2>
       <p>{{ $t('sessions.description', { count: totalItems }) }}</p>
       <span v-if="filterName" class="filter-badge">{{ $t('sessions.filter_badge', { name: filterName }) }}</span>
+      <span v-if="cameraId" class="filter-badge">Kamera: {{ cameraId }}</span>
+      <span v-if="telescopeId" class="filter-badge">Teleskop: {{ telescopeId }}</span>
     </div>
 
     <div class="filters">

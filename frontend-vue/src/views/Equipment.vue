@@ -82,6 +82,14 @@ function viewFrames(filterName: string) {
   router.push({ name: 'sessions', query: { filter_name: filterName } })
 }
 
+function viewCamera(cameraId: number) {
+  router.push({ name: 'sessions', query: { camera_id: String(cameraId) } })
+}
+
+function viewTelescope(telescopeId: number) {
+  router.push({ name: 'sessions', query: { telescope_id: String(telescopeId) } })
+}
+
 // Merge logic
 function openMerge(item: any) {
   mergeSourceId.value = item.id || null
@@ -198,7 +206,7 @@ async function doMerge() {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="c in paginatedItems" :key="c.id">
+            <tr v-for="c in paginatedItems" :key="c.id" class="clickable" @click="viewCamera(c.id)">
               <td><strong>{{ c.name }}</strong> <span v-if="c.short_name" class="text-faint">({{ c.short_name }})</span></td>
               <td>{{ c.pixel_size_um ? c.pixel_size_um + 'µm' : '-' }}</td>
               <td>{{ c.frame_count }}</td>
@@ -225,7 +233,7 @@ async function doMerge() {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="t in paginatedItems" :key="t.id">
+            <tr v-for="t in paginatedItems" :key="t.id" class="clickable" @click="viewTelescope(t.id)">
               <td><strong>{{ t.name }}</strong></td>
               <td>{{ t.focal_length_mm ? t.focal_length_mm + ' mm' : '-' }}</td>
               <td>{{ t.frame_count }}</td>
