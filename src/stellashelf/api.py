@@ -2157,8 +2157,12 @@ def _run_identify_task(session_id: int | None = None, target_id: int | None = No
 
                 target_name = resolve_target_name(obj)
                 norm_name = normalize_object_name(target_name)
+                # Preserve original CSV casing for common/names (non-catalog),
+                # but normalize catalog names (M51, NGC5194, etc.)
+                if norm_name == target_name.strip().upper():
+                    norm_name = target_name.strip()
                 if not norm_name:
-                    norm_name = target_name.upper().strip()
+                    norm_name = target_name.strip().upper()
 
                 existing = sess.query(Target).filter(Target.name == norm_name).first()
                 if existing:
