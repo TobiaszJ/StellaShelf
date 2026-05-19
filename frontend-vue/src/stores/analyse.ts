@@ -28,6 +28,9 @@ export const useAnalyseStore = defineStore('analyse', () => {
     log: [],
   })
   const pollInterval = ref<number | null>(null)
+  const pollFailCount = ref(0)
+  const BASE_INTERVAL = 500
+  const MAX_INTERVAL = 16000
 
   const progress = computed(() => {
     const done = state.value.analysed + state.value.failed
@@ -48,22 +51,32 @@ export const useAnalyseStore = defineStore('analyse', () => {
     try {
       const data = await apiStore.fetch<AnalyseState>('/analyse/status')
       state.value = data
+      pollFailCount.value = 0
     } catch {
-      // ignore polling errors
+      pollFailCount.value++
     }
   }
 
   function startPolling() {
-    if (pollInterval.value) clearInterval(pollInterval.value)
+    if (pollInterval.value) clearTimeout(pollInterval.value)
     fetchStatus()
-    pollInterval.value = window.setInterval(fetchStatus, 500)
+    scheduleNext()
+  }
+
+  function scheduleNext() {
+    const delay = Math.min(BASE_INTERVAL * Math.pow(2, pollFailCount.value), MAX_INTERVAL)
+    pollInterval.value = window.setTimeout(() => {
+      fetchStatus()
+      scheduleNext()
+    }, delay)
   }
 
   function stopPolling() {
     if (pollInterval.value) {
-      clearInterval(pollInterval.value)
+      clearTimeout(pollInterval.value)
       pollInterval.value = null
     }
+    pollFailCount.value = 0
   }
 
   async function startAnalyse(force: boolean = false) {

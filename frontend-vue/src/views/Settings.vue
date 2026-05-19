@@ -60,7 +60,8 @@ async function save() {
     saved.value = true
     setTimeout(() => { saved.value = false }, 2000)
   } catch (e: any) {
-    alert(t('error.generic', { message: e.message || t('error.generic', { message: 'Unbekannter Fehler' }) }))
+      console.error('API error:', e.message || t('error.generic', { message: 'Unbekannter Fehler' }))
+      alert(t('error.generic'))
   } finally {
     saving.value = false
   }
@@ -74,7 +75,8 @@ async function resetDb() {
     alert(t('settings.danger_reset_title') + ' — ' + t('settings.danger_reset_desc'))
     window.location.reload()
   } catch (e: any) {
-    alert(t('error.generic', { message: e.response?.data?.detail || e.message }))
+      console.error('API error:', e.response?.data?.detail || e.message)
+      alert(t('error.generic'))
   } finally {
     resetBusy.value = false
   }

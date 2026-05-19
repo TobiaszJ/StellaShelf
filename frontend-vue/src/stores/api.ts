@@ -113,6 +113,28 @@ export interface PaginatedResponse<T> {
   items: T[]
 }
 
+let _apiKey: string | null = null
+
+async function bootstrapApiKey() {
+  if (_apiKey) return
+  try {
+    const res = await api.get('/api-key')
+    _apiKey = res.data.api_key
+    // Set default header for all requests
+    api.defaults.headers.common['X-API-Key'] = _apiKey
+  } catch {
+    // If localhost key fetch fails, try environment or configured key
+    const envKey = import.meta.env.VITE_STELLASHELF_API_KEY
+    if (envKey) {
+      _apiKey = envKey
+      api.defaults.headers.common['X-API-Key'] = _apiKey
+    }
+  }
+}
+
+// Bootstrap on module load
+bootstrapApiKey()
+
 export const useApiStore = defineStore('api', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)

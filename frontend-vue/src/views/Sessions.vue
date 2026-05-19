@@ -2,10 +2,8 @@
 import { ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useApiStore, type Session, type PaginatedResponse } from '@/stores/api'
-import { useI18n } from 'vue-i18n'
 import Pagination from '@/components/Pagination.vue'
 
-const { t } = useI18n()
 const apiStore = useApiStore()
 const router = useRouter()
 const route = useRoute()

@@ -52,5 +52,10 @@ frontend-vue/dist/
 # Local DB migrations (gitignored by design)
 db_migrations/
 
+# Environment files
+.env
+.env.*
+!.env.example
+
 # Agent instructions (generated per session)
 AGENTS.md

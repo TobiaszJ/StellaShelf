@@ -13,7 +13,7 @@
     "help": "Hilfe",
     "theme_dark": "Dark Mode",
     "theme_light": "Light Mode",
-    "version": "v0.4.0"
+    "version": "v0.5.0"
   },
   "topbar": {
     "title": "StellaShelf"
@@ -93,12 +93,12 @@
     "also_known_as": "auch bekannt als: {names}",
     "merge_button": "Zusammenführen",
     "merge_title": "Target zusammenführen",
-    "merge_description": "Dieses Target (<strong>{name}</strong>) mit einem anderen zusammenführen. Alle Sessions und Frames werden auf das Ziel-Target übertragen.",
+    "merge_description": "Dieses Target ({name}) mit einem anderen zusammenführen. Alle Sessions und Frames werden auf das Ziel-Target übertragen.",
     "merge_search_label": "Ziel-Target suchen",
     "merge_search_placeholder": "Name eingeben...",
     "merge_searching": "Suche...",
     "merge_not_found": "Keine Targets gefunden.",
-    "merge_confirm_text": "<strong>{source}</strong> wird in <strong>{dest}</strong> zusammengeführt.<br/>Danach wird <strong>{source}</strong> gelöscht.",
+    "merge_confirm_text": "{source} wird in {dest} zusammengeführt. Danach wird {source} gelöscht.",
     "merge_confirm": "Bestätigen & Zusammenführen",
     "merge_busy": "Führe zusammen...",
     "merge_cancel": "Abbrechen",
@@ -327,7 +327,7 @@
     "identify_error": "Fehler bei der Identifikation"
   },
   "error": {
-    "generic": "Fehler: {message}",
+    "generic": "Ein Fehler ist aufgetreten. Bitte versuche es erneut.",
     "not_found": "Nicht gefunden"
   }
 }

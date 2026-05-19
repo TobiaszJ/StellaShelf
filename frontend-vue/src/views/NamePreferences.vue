@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useApiStore } from '@/stores/api'
-import { useI18n } from 'vue-i18n'
 
-const { t } = useI18n()
 const apiStore = useApiStore()
 
 interface NamedObject {
@@ -96,7 +94,8 @@ async function saveAll() {
       saveCount.value++
     }
   } catch (e: any) {
-    alert('Fehler: ' + (e.response?.data?.detail || e.message))
+    console.error('API error:', e.response?.data?.detail || e.message)
+    alert('Ein Fehler ist aufgetreten. Bitte versuche es erneut.')
   } finally {
     saving.value = false
   }

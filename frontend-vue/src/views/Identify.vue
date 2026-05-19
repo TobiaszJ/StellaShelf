@@ -4,11 +4,12 @@ import { useIdentifyStore } from '@/stores/identify'
 import BackgroundTaskRunner from '@/components/BackgroundTaskRunner.vue'
 
 const store = useIdentifyStore()
-const { state, progress, phaseLabel } = storeToRefs(store)
+const { state } = storeToRefs(store)
 
 function start() {
   store.startIdentify().catch((e: any) => {
-    alert('Fehler: ' + (e.response?.data?.detail || e.message))
+    console.error('API error:', e.response?.data?.detail || e.message)
+    alert('Ein Fehler ist aufgetreten. Bitte versuche es erneut.')
   })
 }
 

@@ -12,9 +12,12 @@ DEFAULT_APP_DIR = Path.home() / ".stellashelf"
 # Default database file path
 DEFAULT_DB_PATH = DEFAULT_APP_DIR / "stellashelf.db"
 
-# Default server settings
-DEFAULT_HOST = "0.0.0.0"
+# Default server settings — changed to 127.0.0.1 for security
+DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8321
+
+# API key authentication
+API_KEY_FILE = DEFAULT_APP_DIR / "api_key.txt"
 
 # Known camera folder names used for path-based equipment extraction.
 # Can be overridden via the STELLASHELF_KNOWN_CAMERAS environment variable

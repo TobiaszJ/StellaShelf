@@ -91,7 +91,7 @@ def stats(db: str):
 
 
 @main.command()
-@click.option("--host", default="0.0.0.0", help="Host to bind to")
+@click.option("--host", default="127.0.0.1", help="Host to bind to (0.0.0.0 for network access)")
 @click.option("--port", default=8321, help="Port to bind to")
 @click.option("--db", default=str(DEFAULT_DB_PATH), help="Path to SQLite database")
 @click.option("--reload", is_flag=True, help="Enable auto-reload for development")

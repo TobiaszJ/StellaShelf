@@ -37,7 +37,8 @@ async function updateStatus(newStatus: string) {
     await apiStore.patch(`/sessions/${sessionId.value}`, { status: newStatus })
     if (session.value) session.value.status = newStatus
   } catch (e: any) {
-    alert(t('error.generic', { message: e.response?.data?.detail || e.message }))
+      console.error('API error:', e.response?.data?.detail || e.message)
+      alert(t('error.generic'))
   } finally {
     statusUpdating.value = false
   }
@@ -132,7 +133,8 @@ async function runTask(task: string) {
     taskStarted.value = task
     setTimeout(() => { taskStarted.value = null }, 3000)
   } catch (e: any) {
-    alert(t('error.generic', { message: e.response?.data?.detail || e.message }))
+      console.error('API error:', e.response?.data?.detail || e.message)
+      alert(t('error.generic'))
   } finally {
     taskBusy.value = false
   }

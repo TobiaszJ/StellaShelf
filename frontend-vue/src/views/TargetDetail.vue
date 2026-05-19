@@ -48,7 +48,8 @@ async function runTask(task: string) {
     taskStarted.value = task
     setTimeout(() => { taskStarted.value = null }, 3000)
   } catch (e: any) {
-    alert(t('error.generic', { message: e.response?.data?.detail || e.message }))
+    console.error('API error:', e.response?.data?.detail || e.message)
+    alert(t('error.generic'))
   } finally {
     taskBusy.value = false
   }
@@ -171,7 +172,8 @@ async function doMerge() {
     })
     router.push({ name: 'target-detail', params: { id: mergeDestination.value.id } })
   } catch (e: any) {
-    alert(t('error.generic', { message: e.response?.data?.detail || e.message }))
+    console.error('API error:', e.response?.data?.detail || e.message)
+    alert(t('error.generic'))
   } finally {
     mergeBusy.value = false
   }
@@ -231,7 +233,9 @@ watch(mergeSearch, searchMergeTargets)
     <div v-if="showMergeDialog" class="modal-overlay" @click.self="cancelMerge">
       <div class="modal">
         <h3>{{ $t('target_detail.merge_title') }}</h3>
-        <p style="margin-bottom: 12px; color: var(--text-muted); font-size: 13px;" v-html="$t('target_detail.merge_description', { name: target?.name })"></p>
+        <p style="margin-bottom: 12px; color: var(--text-muted); font-size: 13px;">
+          {{ $t('target_detail.merge_description', { name: target?.name }) }}
+        </p>
 
         <div v-if="!mergeDestination">
           <label>{{ $t('target_detail.merge_search_label') }}</label>
@@ -267,7 +271,9 @@ watch(mergeSearch, searchMergeTargets)
               <span class="merge-arrow-sym">→</span>
               <span class="merge-to">{{ mergeDestination.name }}</span>
             </div>
-            <p style="margin-top: 12px;" v-html="$t('target_detail.merge_confirm_text', { source: target?.name, dest: mergeDestination.name })"></p>
+            <p style="margin-top: 12px;">
+              {{ $t('target_detail.merge_confirm_text', { source: target?.name, dest: mergeDestination.name }) }}
+            </p>
             <div class="merge-actions">
               <button class="btn" @click="mergeConfirming = true; doMerge()" :disabled="mergeBusy">
                 {{ mergeBusy ? $t('target_detail.merge_busy') : $t('target_detail.merge_confirm') }}

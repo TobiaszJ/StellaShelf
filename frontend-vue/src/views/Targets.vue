@@ -66,7 +66,8 @@ async function mergeGroup(canonicalName: string) {
     if (duplicates.value.length === 0) showDuplicates.value = false
     load()
   } catch (e: any) {
-    alert(t('error.generic', { message: e.response?.data?.detail || e.message }))
+    console.error('API error:', e.response?.data?.detail || e.message)
+    alert(t('error.generic'))
   } finally {
     merging.value.delete(canonicalName)
   }

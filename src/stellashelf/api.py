@@ -5,13 +5,16 @@ Supports pagination, filtering, and full-text search.
 """
 
 import os
+import secrets
 import threading
+import time
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func as sa_func
@@ -19,7 +22,7 @@ from sqlalchemy import text
 
 from stellashelf import __build__, __version__
 from stellashelf.catalog import normalize_object_name
-from stellashelf.config import DEFAULT_DB_PATH
+from stellashelf.config import API_KEY_FILE, DEFAULT_DB_PATH
 from stellashelf.db import (
     CalibrationFile,
     Camera,
@@ -34,6 +37,100 @@ from stellashelf.db import Session as ObsSession
 from stellashelf.importer import ImporterService
 from stellashelf.scanner import analyse_frame, generate_thumbnail, platesolve_frame
 from stellashelf.skylookup import compute_search_radius, find_dominant_object, resolve_target_name
+
+# ---------------------------------------------------------------------------
+# App initialization
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Security: API Key authentication
+# ---------------------------------------------------------------------------
+
+_API_KEY: str | None = None
+
+
+def _load_or_generate_api_key() -> str:
+    global _API_KEY
+    env_key = os.environ.get("STELLASHELF_API_KEY")
+    if env_key:
+        _API_KEY = env_key
+        return _API_KEY
+    if API_KEY_FILE.exists():
+        _API_KEY = API_KEY_FILE.read_text().strip()
+        return _API_KEY
+    key = f"ss_{secrets.token_urlsafe(32)}"
+    API_KEY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    API_KEY_FILE.write_text(key)
+    _API_KEY = key
+    return _API_KEY
+
+
+_load_or_generate_api_key()
+
+
+def require_api_key(request: Request) -> None:
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return
+    # Allow api-key bootstrap without auth
+    if request.url.path == "/api/v1/api-key":
+        return
+    key = request.headers.get("x-api-key", "")
+    if not key or not _API_KEY:
+        raise HTTPException(status_code=401, detail="API key required")
+    if not secrets.compare_digest(key, _API_KEY):
+        raise HTTPException(status_code=403, detail="Invalid API key")
+
+
+_WHITELISTED_SETTING_KEYS: frozenset[str] = frozenset({
+    "scan_paths",
+    "astap_binary",
+})
+
+_ALLOWED_ASTAP_PATHS: frozenset[str] = frozenset({
+    "astap_cli",
+    "astap",
+    "/usr/bin/astap_cli",
+    "/usr/local/bin/astap_cli",
+    "/usr/bin/astap",
+    "/usr/local/bin/astap",
+})
+
+
+def _validate_settings(settings_list: list["SettingSchema"]) -> None:
+    for s in settings_list:
+        if s.key not in _WHITELISTED_SETTING_KEYS:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Setting key '{s.key}' is not allowed. Allowed keys: {', '.join(sorted(_WHITELISTED_SETTING_KEYS))}",
+            )
+        if s.key == "astap_binary" and s.value and s.value not in _ALLOWED_ASTAP_PATHS and not s.value.startswith("/usr/") and not s.value.startswith("/opt/"):
+            raise HTTPException(
+                status_code=422,
+                detail=f"astap_binary path '{s.value}' is not allowed. Must be one of: {', '.join(sorted(_ALLOWED_ASTAP_PATHS))}, or a path under /usr/ or /opt/",
+            )
+
+
+# ---------------------------------------------------------------------------
+# Rate limiting (simple in-memory token bucket)
+# ---------------------------------------------------------------------------
+
+_rate_limit_store: dict[str, list[float]] = {}
+_RATE_LIMIT_SECONDS = 1.0
+_RATE_LIMIT_MAX = 10
+
+
+def rate_limit_middleware(request: Request) -> None:
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return
+    client_ip = request.client.host if request.client else "unknown"
+    now = time.time()
+    timestamps = _rate_limit_store.get(client_ip, [])
+    timestamps = [t for t in timestamps if now - t < 60.0]
+    if len(timestamps) >= _RATE_LIMIT_MAX:
+        raise HTTPException(status_code=429, detail="Too many requests. Please slow down.")
+    timestamps.append(now)
+    _rate_limit_store[client_ip] = timestamps
+
 
 # ---------------------------------------------------------------------------
 # App initialization
@@ -76,22 +173,59 @@ async def global_exception_handler(request, exc):
     import logging
 
     logging.exception("500 error on %s %s", request.method, request.url.path)
-    from fastapi.responses import JSONResponse
+
+    if isinstance(exc, HTTPException):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail},
+        )
 
     return JSONResponse(
         status_code=500,
-        content={"detail": f"Internal server error: {exc}"},
+        content={"detail": "Internal server error. Please check server logs."},
     )
 
 
-_cors_origins = os.environ.get("STELLASHELF_CORS_ORIGINS", "*").split(",")
+# CORS: restrict to specific origins (default: same-origin only)
+_cors_origins_str = os.environ.get("STELLASHELF_CORS_ORIGINS", "")
+_cors_origins = (
+    [o.strip() for o in _cors_origins_str.split(",") if o.strip()]
+    if _cors_origins_str
+    else []
+)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_cors_origins,
+    allow_origins=_cors_origins or ["http://localhost:5173", "http://localhost:8321", "http://127.0.0.1:8321"],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "HEAD", "OPTIONS", "POST", "PATCH", "DELETE"],
+    allow_headers=[
+        "Content-Type",
+        "Authorization",
+        "X-API-Key",
+        "X-CSRF-Token",
+    ],
 )
+
+
+# Security middleware: API key auth + rate limiting
+@app.middleware("http")
+async def security_middleware(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+    try:
+        require_api_key(request)
+        rate_limit_middleware(request)
+    except HTTPException as exc:
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+    response: Response = await call_next(request)
+
+    # Security headers
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "same-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -367,8 +501,57 @@ class TelescopeListResponse(PaginatedResponse):
 
 
 # ---------------------------------------------------------------------------
+# API Key access (for frontend to bootstrap)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/v1/api-key")
+def get_api_key(request: Request):
+    """Return the API key for localhost clients (frontend bootstrap)."""
+    client_host = request.client.host if request.client else ""
+    if client_host not in ("127.0.0.1", "::1", "localhost"):
+        raise HTTPException(status_code=403, detail="API key can only be retrieved from localhost")
+    return {"api_key": _API_KEY}
+
+
+# ---------------------------------------------------------------------------
 # Scan API
 # ---------------------------------------------------------------------------
+
+
+def _get_allowed_scan_paths() -> list[Path]:
+    """Get allowed scan paths from settings, falling back to user home."""
+    paths: list[Path] = []
+    try:
+        engine, SessionLocal = get_session_local()
+        with SessionLocal() as sess:
+            setting = sess.query(Setting).filter(Setting.key == "scan_paths").first()
+            if setting and setting.value:
+                for p in setting.value.split(","):
+                    p = p.strip()
+                    if p:
+                        paths.append(Path(p).resolve())
+    except Exception:
+        pass
+    if not paths:
+        paths.append(Path.home())
+    return paths
+
+
+def _validate_scan_path(resolved: Path) -> None:
+    allowed = _get_allowed_scan_paths()
+    if not allowed:
+        return
+    for base in allowed:
+        try:
+            resolved.relative_to(base)
+            return
+        except ValueError:
+            continue
+    raise HTTPException(
+        status_code=403,
+        detail="Scan path is not within allowed directories. Configure scan_paths setting first.",
+    )
 
 
 class ScanRequest(BaseModel):
@@ -376,9 +559,14 @@ class ScanRequest(BaseModel):
     recursive: bool = True
 
 
+def _escape_like(pattern: str) -> str:
+    """Escape LIKE special characters (% and _) in a search pattern."""
+    return pattern.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 @app.get("/api/v1/health")
 def health_check():
-    return {"status": "ok", "version": __version__, "build": __build__, "db": str(_db_path)}
+    return {"status": "ok", "version": __version__, "build": __build__}
 
 
 @app.get("/api/v1/search")
@@ -405,7 +593,7 @@ def search_all(
         # Search targets by name
         target_results = (
             session.query(Target.id, Target.name, Target.object_type)
-            .filter(Target.name.ilike(f"%{q}%"))
+            .filter(Target.name.ilike(f"%{_escape_like(q)}%"))
             .limit(limit)
             .all()
         )
@@ -416,7 +604,7 @@ def search_all(
                 ObsSession.id, ObsSession.group_key, ObsSession.date_obs, ObsSession.frame_count
             )
             .join(Target, Target.id == ObsSession.target_id)
-            .filter(Target.name.ilike(f"%{q}%"))
+            .filter(Target.name.ilike(f"%{_escape_like(q)}%"))
             .limit(limit)
             .all()
         )
@@ -451,17 +639,18 @@ def start_scan(request: ScanRequest):
     """Start a background scan of FITS files."""
     global _scan_state
 
-    with _scan_lock:
-        if _scan_state["running"]:
-            raise HTTPException(status_code=409, detail="A scan is already running")
-
     scan_path = Path(request.path)
     resolved = scan_path.resolve()
 
     if not resolved.exists() or not resolved.is_dir():
-        raise HTTPException(status_code=404, detail=f"Path not found: {resolved}")
+        raise HTTPException(status_code=404, detail="Path not found")
+
+    # Validate path against allowed directories from settings
+    _validate_scan_path(resolved)
 
     with _scan_lock:
+        if _scan_state["running"]:
+            raise HTTPException(status_code=409, detail="A scan is already running")
         _scan_state["running"] = True
         _scan_state["total"] = 0
         _scan_state["processed"] = 0
@@ -630,7 +819,7 @@ def list_targets(
         ).outerjoin(ObsSession, ObsSession.target_id == Target.id)
 
         if search:
-            q = q.filter(Target.name.ilike(f"%{search}%"))
+            q = q.filter(Target.name.ilike(f"%{_escape_like(search)}%"))
         if object_type:
             q = q.filter(Target.object_type == object_type)
         if constellation:
@@ -1299,13 +1488,13 @@ def list_frames(
         if session_id is not None:
             q = q.filter(Frame.session_id == session_id)
         if object_name:
-            q = q.filter(Frame.object_name.ilike(f"%{object_name}%"))
+            q = q.filter(Frame.object_name.ilike(f"%{_escape_like(object_name)}%"))
         if filter_name:
             q = q.filter(Frame.filter_name == filter_name)
         if frame_type:
             q = q.filter(Frame.frame_type == frame_type)
         if camera:
-            q = q.filter(Frame.instrume.ilike(f"%{camera}%"))
+            q = q.filter(Frame.instrume.ilike(f"%{_escape_like(camera)}%"))
         if has_coordinates is True:
             q = q.filter(Frame.ra_deg.isnot(None), Frame.dec_deg.isnot(None))
         elif has_coordinates is False:
@@ -1504,6 +1693,9 @@ def delete_frames(req: FrameDeleteRequest):
 
 def _cleanup_orphans(session):
     """Delete orphaned sessions (no frames), targets (no sessions), and unused equipment."""
+    from stellashelf.db import CalibrationFile, Camera, Target, Telescope
+    from stellashelf.db import Session as ObsSession
+
     result = {"sessions": 0, "targets": 0, "cameras": 0, "telescopes": 0}
 
     # Orphaned sessions
@@ -1516,9 +1708,7 @@ def _cleanup_orphans(session):
         ).fetchall()
     ]
     if orphan_sid:
-        session.execute(
-            text(f"DELETE FROM sessions WHERE id IN ({','.join(map(str, orphan_sid))})")
-        )
+        session.query(ObsSession).filter(ObsSession.id.in_(orphan_sid)).delete(synchronize_session="fetch")
     result["sessions"] = len(orphan_sid)
 
     # Orphaned targets
@@ -1531,7 +1721,7 @@ def _cleanup_orphans(session):
         ).fetchall()
     ]
     if orphan_tid:
-        session.execute(text(f"DELETE FROM targets WHERE id IN ({','.join(map(str, orphan_tid))})"))
+        session.query(Target).filter(Target.id.in_(orphan_tid)).delete(synchronize_session="fetch")
     result["targets"] = len(orphan_tid)
 
     # Orphaned cameras (delete calibration files first, then cameras)
@@ -1544,9 +1734,10 @@ def _cleanup_orphans(session):
         ).fetchall()
     ]
     if orphan_cid:
-        cids = ",".join(map(str, orphan_cid))
-        session.execute(text(f"DELETE FROM calibration_files WHERE camera_id IN ({cids})"))
-        session.execute(text(f"DELETE FROM cameras WHERE id IN ({cids})"))
+        session.query(CalibrationFile).filter(CalibrationFile.camera_id.in_(orphan_cid)).delete(
+            synchronize_session="fetch"
+        )
+        session.query(Camera).filter(Camera.id.in_(orphan_cid)).delete(synchronize_session="fetch")
     result["cameras"] = len(orphan_cid)
 
     # Orphaned telescopes
@@ -1559,8 +1750,8 @@ def _cleanup_orphans(session):
         ).fetchall()
     ]
     if orphan_telid:
-        session.execute(
-            text(f"DELETE FROM telescopes WHERE id IN ({','.join(map(str, orphan_telid))})")
+        session.query(Telescope).filter(Telescope.id.in_(orphan_telid)).delete(
+            synchronize_session="fetch"
         )
     result["telescopes"] = len(orphan_telid)
 
@@ -1793,7 +1984,8 @@ def list_settings():
 
 @app.post("/api/v1/settings")
 def update_settings(settings: list[SettingSchema]):
-    """Update application settings (upsert by key)."""
+    """Update application settings (upsert by key). Only whitelisted keys are allowed."""
+    _validate_settings(settings)
     engine, SessionLocal = get_session_local()
     with SessionLocal() as sess:
         for s in settings:

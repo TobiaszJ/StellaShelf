@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useApiStore, type Camera, type Telescope, type FilterStat, type PaginatedResponse } from '@/stores/api'
-import { useI18n } from 'vue-i18n'
+import { useApiStore, type Camera, type Telescope, type FilterStat } from '@/stores/api'
 import Pagination from '@/components/Pagination.vue'
 
-const { t } = useI18n()
 const apiStore = useApiStore()
 const router = useRouter()
 const activeTab = ref('cameras')
@@ -165,7 +163,8 @@ async function doMerge() {
     }
     cancelMerge()
   } catch (e: any) {
-    alert('Fehler: ' + (e.response?.data?.detail || e.message))
+      console.error('API error:', e.response?.data?.detail || e.message)
+      alert('Ein Fehler ist aufgetreten. Bitte versuche es erneut.')
   } finally {
     mergeBusy.value = false
   }

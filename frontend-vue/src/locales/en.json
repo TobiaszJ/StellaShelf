@@ -13,7 +13,7 @@
     "help": "Help",
     "theme_dark": "Dark Mode",
     "theme_light": "Light Mode",
-    "version": "v0.4.0"
+    "version": "v0.5.0"
   },
   "topbar": {
     "title": "StellaShelf"
@@ -93,12 +93,12 @@
     "also_known_as": "also known as: {names}",
     "merge_button": "Merge",
     "merge_title": "Merge Target",
-    "merge_description": "Merge this target (<strong>{name}</strong>) into another. All sessions and frames will be transferred to the destination target.",
+    "merge_description": "Merge this target ({name}) into another. All sessions and frames will be transferred to the destination target.",
     "merge_search_label": "Search destination target",
     "merge_search_placeholder": "Enter name...",
     "merge_searching": "Searching...",
     "merge_not_found": "No targets found.",
-    "merge_confirm_text": "<strong>{source}</strong> will be merged into <strong>{dest}</strong>.<br/><strong>{source}</strong> will then be deleted.",
+    "merge_confirm_text": "{source} will be merged into {dest}. {source} will then be deleted.",
     "merge_confirm": "Confirm & Merge",
     "merge_busy": "Merging...",
     "merge_cancel": "Cancel",
@@ -327,7 +327,7 @@
     "identify_error": "Identification error"
   },
   "error": {
-    "generic": "Error: {message}",
+    "generic": "An error occurred. Please try again.",
     "not_found": "Not found"
   }
 }

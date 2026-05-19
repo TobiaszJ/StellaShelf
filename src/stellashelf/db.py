@@ -321,8 +321,11 @@ def init_db(db_path: Path | None = None) -> tuple:
         from stellashelf.migrate import run_migrations
 
         run_migrations(engine)
-    except Exception:
+    except FileNotFoundError:
         pass  # noop — migrations dir may not exist
+    except Exception:
+        import logging
+        logging.exception("Migration error (non-fatal, continuing)")
 
     SessionLocal = sessionmaker(bind=engine)
     return engine, SessionLocal

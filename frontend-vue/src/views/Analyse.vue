@@ -1,20 +1,21 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
 import { useAnalyseStore } from '@/stores/analyse'
-import BackgroundTaskRunner from '@/components/BackgroundTaskRunner.vue'
 
 const store = useAnalyseStore()
-const { state, progress, phaseLabel } = storeToRefs(store)
+const { state, progress } = storeToRefs(store)
 
 function startUnanalysed() {
   store.startAnalyse(false).catch((e: any) => {
-    alert('Fehler: ' + (e.response?.data?.detail || e.message))
+    console.error('API error:', e.response?.data?.detail || e.message)
+    alert('Ein Fehler ist aufgetreten. Bitte versuche es erneut.')
   })
 }
 
 function startForceAll() {
   store.startAnalyse(true).catch((e: any) => {
-    alert('Fehler: ' + (e.response?.data?.detail || e.message))
+    console.error('API error:', e.response?.data?.detail || e.message)
+    alert('Ein Fehler ist aufgetreten. Bitte versuche es erneut.')
   })
 }
 

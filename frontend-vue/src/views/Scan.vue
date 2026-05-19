@@ -59,7 +59,8 @@ async function startScan() {
   try {
     await scanStore.startScan(selectedPath.value)
   } catch (e: any) {
-    alert(e.response?.data?.detail || t('phase.scan_error'))
+    console.error('API error:', e.response?.data?.detail || t('phase.scan_error'))
+    alert('Ein Fehler ist aufgetreten. Bitte versuche es erneut.')
   }
 }
 
@@ -81,7 +82,8 @@ async function searchFrames() {
     cleanupResults.value = res.items || []
     cleanupTotal.value = res.total || 0
   } catch (e: any) {
-    alert(t('error.generic', { message: e.response?.data?.detail || e.message }))
+      console.error('API error:', e.response?.data?.detail || e.message)
+      alert(t('error.generic'))
   } finally {
     cleanupLoading.value = false
   }
@@ -118,7 +120,8 @@ async function deleteSelected() {
     cleanupSelected.value = new Set()
     cleanupTotal.value -= res.deleted
   } catch (e: any) {
-    alert(t('error.generic', { message: e.response?.data?.detail || e.message }))
+      console.error('API error:', e.response?.data?.detail || e.message)
+      alert(t('error.generic'))
   } finally {
     cleanupBusy.value = false
   }
@@ -133,7 +136,8 @@ async function cleanupOrphans() {
       result: `${res.sessions} ${t('nav.sessions')}, ${res.targets} ${t('nav.targets')}, ${res.cameras} ${t('equipment.tab_cameras', { count: 0 }).split(' ')[0]}, ${res.telescopes} ${t('equipment.tab_telescopes', { count: 0 }).split(' ')[0]}`
     })
   } catch (e: any) {
-    alert(t('error.generic', { message: e.response?.data?.detail || e.message }))
+      console.error('API error:', e.response?.data?.detail || e.message)
+      alert(t('error.generic'))
   } finally {
     cleanupOrphansBusy.value = false
   }
