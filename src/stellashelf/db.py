@@ -325,6 +325,7 @@ def init_db(db_path: Path | None = None) -> tuple:
         pass  # noop — migrations dir may not exist
     except Exception:
         import logging
+
         logging.exception("Migration error (non-fatal, continuing)")
 
     SessionLocal = sessionmaker(bind=engine)

@@ -48,7 +48,9 @@ class TestHealth:
 
 class TestScan:
     def test_scan_invalid_path(self, client):
-        resp = client.post("/api/v1/scan", json={"path": "/nonexistent/path"}, headers=auth_headers())
+        resp = client.post(
+            "/api/v1/scan", json={"path": "/nonexistent/path"}, headers=auth_headers()
+        )
         assert resp.status_code == 404
 
     def test_scan_status(self, client):
@@ -139,14 +141,10 @@ class TestAuth:
 
     def test_invalid_api_key_rejected(self, client):
         """POST with invalid API key should return 403."""
-        resp = client.post(
-            "/api/v1/settings", json=[], headers={"X-API-Key": "invalid-key"}
-        )
+        resp = client.post("/api/v1/settings", json=[], headers={"X-API-Key": "invalid-key"})
         assert resp.status_code == 403
 
     def test_valid_api_key_accepted(self, client):
         """POST with valid API key should succeed (may still have other errors)."""
-        resp = client.post(
-            "/api/v1/settings", json=[], headers=auth_headers()
-        )
+        resp = client.post("/api/v1/settings", json=[], headers=auth_headers())
         assert resp.status_code in (200, 422)

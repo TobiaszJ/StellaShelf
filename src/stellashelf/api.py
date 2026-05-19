@@ -81,19 +81,23 @@ def require_api_key(request: Request) -> None:
         raise HTTPException(status_code=403, detail="Invalid API key")
 
 
-_WHITELISTED_SETTING_KEYS: frozenset[str] = frozenset({
-    "scan_paths",
-    "astap_binary",
-})
+_WHITELISTED_SETTING_KEYS: frozenset[str] = frozenset(
+    {
+        "scan_paths",
+        "astap_binary",
+    }
+)
 
-_ALLOWED_ASTAP_PATHS: frozenset[str] = frozenset({
-    "astap_cli",
-    "astap",
-    "/usr/bin/astap_cli",
-    "/usr/local/bin/astap_cli",
-    "/usr/bin/astap",
-    "/usr/local/bin/astap",
-})
+_ALLOWED_ASTAP_PATHS: frozenset[str] = frozenset(
+    {
+        "astap_cli",
+        "astap",
+        "/usr/bin/astap_cli",
+        "/usr/local/bin/astap_cli",
+        "/usr/bin/astap",
+        "/usr/local/bin/astap",
+    }
+)
 
 
 def _validate_settings(settings_list: list["SettingSchema"]) -> None:
@@ -103,7 +107,13 @@ def _validate_settings(settings_list: list["SettingSchema"]) -> None:
                 status_code=422,
                 detail=f"Setting key '{s.key}' is not allowed. Allowed keys: {', '.join(sorted(_WHITELISTED_SETTING_KEYS))}",
             )
-        if s.key == "astap_binary" and s.value and s.value not in _ALLOWED_ASTAP_PATHS and not s.value.startswith("/usr/") and not s.value.startswith("/opt/"):
+        if (
+            s.key == "astap_binary"
+            and s.value
+            and s.value not in _ALLOWED_ASTAP_PATHS
+            and not s.value.startswith("/usr/")
+            and not s.value.startswith("/opt/")
+        ):
             raise HTTPException(
                 status_code=422,
                 detail=f"astap_binary path '{s.value}' is not allowed. Must be one of: {', '.join(sorted(_ALLOWED_ASTAP_PATHS))}, or a path under /usr/ or /opt/",
@@ -189,13 +199,12 @@ async def global_exception_handler(request, exc):
 # CORS: restrict to specific origins (default: same-origin only)
 _cors_origins_str = os.environ.get("STELLASHELF_CORS_ORIGINS", "")
 _cors_origins = (
-    [o.strip() for o in _cors_origins_str.split(",") if o.strip()]
-    if _cors_origins_str
-    else []
+    [o.strip() for o in _cors_origins_str.split(",") if o.strip()] if _cors_origins_str else []
 )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_cors_origins or ["http://localhost:5173", "http://localhost:8321", "http://127.0.0.1:8321"],
+    allow_origins=_cors_origins
+    or ["http://localhost:5173", "http://localhost:8321", "http://127.0.0.1:8321"],
     allow_credentials=True,
     allow_methods=["GET", "HEAD", "OPTIONS", "POST", "PATCH", "DELETE"],
     allow_headers=[
@@ -209,7 +218,9 @@ app.add_middleware(
 
 # Security middleware: API key auth + rate limiting
 @app.middleware("http")
-async def security_middleware(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+async def security_middleware(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
     try:
         require_api_key(request)
         rate_limit_middleware(request)
@@ -1708,7 +1719,9 @@ def _cleanup_orphans(session):
         ).fetchall()
     ]
     if orphan_sid:
-        session.query(ObsSession).filter(ObsSession.id.in_(orphan_sid)).delete(synchronize_session="fetch")
+        session.query(ObsSession).filter(ObsSession.id.in_(orphan_sid)).delete(
+            synchronize_session="fetch"
+        )
     result["sessions"] = len(orphan_sid)
 
     # Orphaned targets
